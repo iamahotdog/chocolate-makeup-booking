@@ -27,6 +27,71 @@ body{padding-bottom:max(28px,env(safe-area-inset-bottom))}
 .toast{position:fixed;left:50%;bottom:24px;z-index:99;transform:translateX(-50%) translateY(30px);opacity:0;pointer-events:none;transition:.2s;padding:10px 14px;border-radius:999px;background:#4c3228;color:#fff;font-size:12px;box-shadow:0 8px 24px rgba(0,0,0,.18)}.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 .modal{position:fixed;inset:0;z-index:100;display:none;align-items:center;justify-content:center;padding:22px;background:rgba(50,32,23,.48);backdrop-filter:blur(3px)}.modal.show{display:flex}.modalCard{width:min(100%,350px);padding:21px;border-radius:22px;background:#fff;text-align:center;box-shadow:0 24px 60px rgba(0,0,0,.2)}.modalCard h3{margin:0 0 8px;font-size:20px}.modalCard p{margin:0;color:var(--muted);font-size:13px;line-height:1.7}.modalActions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:17px}.modalActions button{border:0;border-radius:13px;padding:11px;font-weight:800}.cancel{background:#f4ece7;color:#76584b}.ok{background:var(--brown);color:#fff}
 .vacationBox{padding:4px 12px 7px}.vacationToggle{width:100%;border:1px solid var(--line);border-radius:14px;padding:11px;background:#fff;color:var(--brown);font-weight:850}.vacationPanel{display:none;margin-top:9px;padding:12px;border:1px solid var(--line);border-radius:17px;background:#fff}.vacationPanel.show{display:block}.vacationRow{display:grid;grid-template-columns:1fr 100px;gap:8px}.closedDaysList{margin-top:9px}.closedDay{display:flex;align-items:center;justify-content:space-between;padding:9px 4px;border-top:1px solid #f1e5de;font-size:12px}.closedDay button{border:0;background:#f8e7e2;color:#94493c;border-radius:10px;padding:7px 9px;font-weight:800}
+
+.managerNav{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  padding:14px 16px 4px;
+  font-size:12px;
+}
+.managerNavBtn{
+  border:0;
+  background:none;
+  padding:6px 2px;
+  color:var(--muted);
+  font-weight:800;
+}
+.managerNavBtn.active{color:var(--brown)}
+.crumbSep{color:#c7a99a}
+.managerPage.hidden{display:none}
+.pageIntro{padding:10px 16px 4px}
+.pageIntro h1{margin:0;font-size:22px}
+.pageIntro p{margin:5px 0 0;color:var(--muted);font-size:12px;line-height:1.6}
+.vacationCard{
+  margin:12px;
+  padding:16px;
+  border:1px solid var(--line);
+  border-radius:22px;
+  background:#fff;
+  box-shadow:var(--shadow)
+}
+.monthBar{display:grid;grid-template-columns:42px 1fr 42px;align-items:center;gap:8px}
+.monthBtn{border:0;border-radius:12px;padding:9px;background:var(--soft);color:var(--brown);font-size:20px}
+.monthLabel{text-align:center;font-size:17px;font-weight:850}
+.weekHead,.calendarGrid{display:grid;grid-template-columns:repeat(7,1fr);gap:7px}
+.weekHead{margin:16px 0 8px;color:var(--muted);font-size:10px;text-align:center}
+.dayBtn{
+  aspect-ratio:1/1;
+  border:1px solid #eee0d7;
+  border-radius:13px;
+  background:#fff;
+  color:var(--ink);
+  font-weight:750;
+}
+.dayBtn.other{opacity:.28}
+.dayBtn.closed{
+  background:#f5e6de;
+  border-color:#debbaa;
+  color:#8f4e3e;
+}
+.dayBtn.selected{
+  outline:2px solid var(--brown);
+  outline-offset:1px;
+}
+.dayBtn.today::after{
+  content:"";
+  display:block;
+  width:4px;height:4px;border-radius:50%;
+  background:var(--brown);
+  margin:3px auto 0;
+}
+.selectionHint{margin:15px 0 10px;text-align:center;color:var(--muted);font-size:12px}
+.bulkActions{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.bulkBtn{border:0;border-radius:14px;padding:12px;font-weight:850}
+.closeDays{background:var(--brown);color:#fff}
+.openDays{background:#f7e8e2;color:#954f40}
+
 </style>
 </head>
 <body>
@@ -42,22 +107,58 @@ body{padding-bottom:max(28px,env(safe-area-inset-bottom))}
   </div>
 </section>
 
+
 <section id="dashboard" class="dashboard">
-  <div class="tabs">
-    <button class="tab active" data-filter="pending" onclick="setFilter('pending',this)">待訂金</button>
-    <button class="tab" data-filter="confirmed" onclick="setFilter('confirmed',this)">已確認</button>
-    <button class="tab" data-filter="today" onclick="setFilter('today',this)">今日</button>
-    <button class="tab" data-filter="released" onclick="setFilter('released',this)">已釋放</button>
-  </div>
-  <div id="summary" class="summary"></div>
-  <section class="vacationBox">
-    <button class="vacationToggle" onclick="toggleVacation()">休假日設定</button>
-    <div id="vacationPanel" class="vacationPanel">
-      <div class="vacationRow"><input id="closedDate" class="control" type="date"><button class="btn confirm" onclick="setClosedDay(true)">設為休假</button></div>
-      <div id="closedDaysList" class="closedDaysList"></div>
+  <nav class="managerNav" aria-label="管理頁面">
+    <button id="navBookings" class="managerNavBtn active" onclick="showManagerPage('bookings')">首頁</button>
+    <span class="crumbSep">›</span>
+    <button id="navVacation" class="managerNavBtn" onclick="showManagerPage('vacation')">休假</button>
+  </nav>
+
+  <section id="bookingsPage" class="managerPage">
+    <div class="pageIntro">
+      <h1>預約管理</h1>
+      <p>確認訂金、取消或釋放時段都在這裡處理。</p>
+    </div>
+
+    <div class="tabs">
+      <button class="tab active" data-filter="pending" onclick="setFilter('pending',this)">待訂金</button>
+      <button class="tab" data-filter="confirmed" onclick="setFilter('confirmed',this)">已確認</button>
+      <button class="tab" data-filter="today" onclick="setFilter('today',this)">今日</button>
+      <button class="tab" data-filter="released" onclick="setFilter('released',this)">已釋放</button>
+    </div>
+    <div id="summary" class="summary"></div>
+    <div id="list" class="list"></div>
+  </section>
+
+  <section id="vacationPage" class="managerPage hidden">
+    <div class="pageIntro">
+      <h1>休假日設定</h1>
+      <p>一次選好多天，最後再統一設定，不用一筆一筆按。</p>
+    </div>
+
+    <div class="vacationCard">
+      <div class="monthBar">
+        <button class="monthBtn" onclick="shiftVacationMonth(-1)">‹</button>
+        <div id="vacationMonthLabel" class="monthLabel"></div>
+        <button class="monthBtn" onclick="shiftVacationMonth(1)">›</button>
+      </div>
+
+      <div class="weekHead">
+        <span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span>
+      </div>
+      <div id="vacationCalendar" class="calendarGrid"></div>
+
+      <div class="selectionHint">
+        已選 <b id="selectedCount">0</b> 天
+      </div>
+
+      <div class="bulkActions">
+        <button class="bulkBtn closeDays" onclick="applyVacationBulk('close')">設為休假</button>
+        <button class="bulkBtn openDays" onclick="applyVacationBulk('open')">恢復開放</button>
+      </div>
     </div>
   </section>
-  <div id="list" class="list"></div>
 </section>
 </main>
 
@@ -207,25 +308,103 @@ function toast(t){
   clearTimeout(toast._t);toast._t=setTimeout(()=>el.classList.remove('show'),4200);
 }
 
-function toggleVacation(){
-  const p=document.getElementById('vacationPanel'); p.classList.toggle('show');
-  if(p.classList.contains('show')) loadClosedDays();
+
+let managerPage='bookings';
+let vacationCursor=new Date();
+vacationCursor.setDate(1);
+let selectedVacationDates=new Set();
+let closedVacationDates=new Set();
+
+function showManagerPage(page){
+  managerPage=page;
+  document.getElementById('bookingsPage').classList.toggle('hidden',page!=='bookings');
+  document.getElementById('vacationPage').classList.toggle('hidden',page!=='vacation');
+  document.getElementById('navBookings').classList.toggle('active',page==='bookings');
+  document.getElementById('navVacation').classList.toggle('active',page==='vacation');
+  if(page==='vacation') loadVacationMonth();
 }
-async function loadClosedDays(){
+
+function shiftVacationMonth(delta){
+  vacationCursor.setMonth(vacationCursor.getMonth()+delta);
+  vacationCursor.setDate(1);
+  selectedVacationDates.clear();
+  loadVacationMonth();
+}
+
+function monthKey(){
+  return vacationCursor.getFullYear()+'-'+String(vacationCursor.getMonth()+1).padStart(2,'0');
+}
+
+async function loadVacationMonth(){
   try{
-    const now=new Date(), month=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+    const month=monthKey();
     const r=await jsonp({action:'admin_closed_days',adminKey,month});
-    const box=document.getElementById('closedDaysList'), items=r.items||[];
-    box.innerHTML=items.length?items.map(x=>`<div class="closedDay"><span>${escapeHtml(x.date.replaceAll('-','/'))}</span><button onclick="removeClosedDay('${x.date}')">恢復開放</button></div>`).join(''):'<div class="empty" style="margin:12px 0">本月尚未設定休假日</div>';
-  }catch(e){toast(e.message||'讀取休假日失敗')}
+    closedVacationDates=new Set((r.items||[]).map(x=>x.date));
+    renderVacationCalendar();
+  }catch(e){
+    toast(e.message||'讀取休假日失敗');
+  }
 }
-async function setClosedDay(closed,dateOverride){
-  const date=dateOverride||document.getElementById('closedDate').value;
-  if(!date){toast('請先選日期');return}
-  await fetch(API_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},body:new URLSearchParams({action:'admin_closed_day_update',adminKey,date,closed:String(closed)})});
-  toast(closed?'已設為休假日':'已恢復開放'); setTimeout(loadClosedDays,400);
+
+function renderVacationCalendar(){
+  const year=vacationCursor.getFullYear();
+  const month=vacationCursor.getMonth();
+  document.getElementById('vacationMonthLabel').textContent=year+' 年 '+(month+1)+' 月';
+
+  const first=new Date(year,month,1);
+  const gridStart=new Date(year,month,1-first.getDay());
+  const today=new Date();
+  const todayKey=toDateKey(today);
+
+  let html='';
+  for(let i=0;i<42;i++){
+    const d=new Date(gridStart);
+    d.setDate(gridStart.getDate()+i);
+    const key=toDateKey(d);
+    const other=d.getMonth()!==month;
+    const closed=closedVacationDates.has(key);
+    const selected=selectedVacationDates.has(key);
+    const cls=['dayBtn',other?'other':'',closed?'closed':'',selected?'selected':'',key===todayKey?'today':''].filter(Boolean).join(' ');
+    html+=`<button class="${cls}" onclick="toggleVacationDate('${key}')">${d.getDate()}</button>`;
+  }
+  document.getElementById('vacationCalendar').innerHTML=html;
+  document.getElementById('selectedCount').textContent=selectedVacationDates.size;
 }
-function removeClosedDay(date){setClosedDay(false,date)}
+
+function toggleVacationDate(key){
+  if(selectedVacationDates.has(key)) selectedVacationDates.delete(key);
+  else selectedVacationDates.add(key);
+  renderVacationCalendar();
+}
+
+function toDateKey(d){
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+
+async function applyVacationBulk(mode){
+  const dates=[...selectedVacationDates];
+  if(!dates.length){toast('請先選日期');return}
+
+  try{
+    toast(mode==='close'?'正在設定休假…':'正在恢復開放…');
+    await fetch(API_URL,{
+      method:'POST',
+      mode:'no-cors',
+      headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},
+      body:new URLSearchParams({
+        action:'admin_vacation_bulk',
+        adminKey,
+        dates:JSON.stringify(dates),
+        mode
+      })
+    });
+    selectedVacationDates.clear();
+    setTimeout(loadVacationMonth,450);
+    toast(mode==='close'?'已設定休假日':'已恢復開放');
+  }catch(e){
+    toast(e.message||'更新失敗');
+  }
+}
 
 function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function js(s){return String(s??'').replace(/\\/g,'\\\\').replace(/'/g,"\\'")}
