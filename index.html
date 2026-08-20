@@ -414,7 +414,7 @@ body.modalOpen{
   <div class="field"><label class="requiredLabel">想預約哪一天？</label><input id="date" class="control" type="date" aria-label="預約日期" required></div>
   <div class="field">
     <label class="requiredLabel">希望幾點開始？</label>
-    <div class="timeGrid"><select id="hour" class="control" required></select><div class="colon">:</div><select id="minute" class="control" required></select></div><div class="fieldHint">開放時段：10:00–12:30、14:00 之後。</div>
+    <div class="timeGrid"><select id="hour" class="control" required></select><div class="colon">:</div><select id="minute" class="control" required></select></div><div class="fieldHint">平日開妝時間為 10:00 前或 14:00 後；假日全時段開放。</div>
     
   </div>
 
@@ -913,18 +913,16 @@ function toggleArea(){
   }
 }
 
-function isAllowedStartTime(time){
+function isAllowedStartTime(time,dateValue){
   if(!time) return false;
+  const dateStr=dateValue || ($('date') ? $('date').value : '');
+  if(!dateStr) return false;
+  const d=new Date(dateStr+'T12:00:00');
+  const day=d.getDay();
+  if(day===0 || day===6) return true;
   const [h,m]=time.split(':').map(Number);
   const mins=h*60+m;
-
-  // 上午：10:00～12:30（含）
-  if(mins >= 10*60 && mins <= 12*60+30) return true;
-
-  // 下午：14:00 以後
-  if(mins >= 14*60) return true;
-
-  return false;
+  return mins < 600 || mins >= 840;
 }
 
 function refreshAllowedTimeOptions(){
@@ -937,7 +935,7 @@ function refreshAllowedTimeOptions(){
     if(!opt.value) return;
     const h=Number(opt.value);
     const hasAllowed=[0,5,10,15,20,25,30,35,40,45,50,55]
-      .some(m=>isAllowedStartTime(String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')));
+      .some(m=>isAllowedStartTime(String(h).padStart(2,'0')+':'+String(m).padStart(2,'0'),$('date').value));
     opt.disabled=!hasAllowed;
   });
 
@@ -945,7 +943,7 @@ function refreshAllowedTimeOptions(){
   const h=hourEl.value;
   Array.from(minuteEl.options).forEach(opt=>{
     if(!opt.value) return;
-    opt.disabled = !h || !isAllowedStartTime(h+':'+opt.value);
+    opt.disabled = !h || !isAllowedStartTime(h+':'+opt.value,$('date').value);
   });
 
   if(hourEl.value && hourEl.selectedOptions[0] && hourEl.selectedOptions[0].disabled){
@@ -1042,7 +1040,7 @@ async function sendBookingSummaryToOfficialAccount(r,p){
         type:'text',
         text:
           '🥨 預約資料已填寫完成\n'+
-          '服務：'+r.service+'\n'+          '預約編號：'+r.id+'\n'+
+          '服務：'+r.service+'\n'+          r.id+'\n'+
 
           '預約時間：'+displayDateTime(r.date,r.time)+'\n'+
           '姓名：'+p.name+'\n'+
@@ -1052,7 +1050,9 @@ async function sendBookingSummaryToOfficialAccount(r,p){
           (p.locationType==='到府服務／自選地點' ? '\n※將依實際地點確認交通與到府費用' : '')+'\n'+
           extra+
           (p.note ? '其他補充：'+p.note+'\n' : '')+
-          '\n※後續會先透過 LINE 討論妝造細節；完成訂金支付後，才會正式保留時段。'
+          '\n🥖 記得私訊巧克力討論妝造細節
+🍞 請提供 1 張面光清楚的素顏照
+🥐 再提供 2 張能清楚看見五官的生活照'
       }
     ]);
 
@@ -1064,8 +1064,8 @@ async function sendBookingSummaryToOfficialAccount(r,p){
 }
 
 async function pollStatus(requestId){
-  for(let i=0;i<18;i++){
-    await new Promise(r=>setTimeout(r,350));
+  for(let i=0;i<24;i++){
+    await new Promise(r=>setTimeout(r,180));
     const s=await jsonp({action:'status',requestId});
     if(s&&s.status==='success')return s;
     if(s&&s.status==='error')throw new Error(s.message||'預約失敗');

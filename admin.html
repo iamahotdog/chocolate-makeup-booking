@@ -26,6 +26,7 @@ body{padding-bottom:max(28px,env(safe-area-inset-bottom))}
 .loading{padding:35px;text-align:center;color:var(--muted)}
 .toast{position:fixed;left:50%;bottom:24px;z-index:99;transform:translateX(-50%) translateY(30px);opacity:0;pointer-events:none;transition:.2s;padding:10px 14px;border-radius:999px;background:#4c3228;color:#fff;font-size:12px;box-shadow:0 8px 24px rgba(0,0,0,.18)}.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 .modal{position:fixed;inset:0;z-index:100;display:none;align-items:center;justify-content:center;padding:22px;background:rgba(50,32,23,.48);backdrop-filter:blur(3px)}.modal.show{display:flex}.modalCard{width:min(100%,350px);padding:21px;border-radius:22px;background:#fff;text-align:center;box-shadow:0 24px 60px rgba(0,0,0,.2)}.modalCard h3{margin:0 0 8px;font-size:20px}.modalCard p{margin:0;color:var(--muted);font-size:13px;line-height:1.7}.modalActions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:17px}.modalActions button{border:0;border-radius:13px;padding:11px;font-weight:800}.cancel{background:#f4ece7;color:#76584b}.ok{background:var(--brown);color:#fff}
+.vacationBox{padding:4px 12px 7px}.vacationToggle{width:100%;border:1px solid var(--line);border-radius:14px;padding:11px;background:#fff;color:var(--brown);font-weight:850}.vacationPanel{display:none;margin-top:9px;padding:12px;border:1px solid var(--line);border-radius:17px;background:#fff}.vacationPanel.show{display:block}.vacationRow{display:grid;grid-template-columns:1fr 100px;gap:8px}.closedDaysList{margin-top:9px}.closedDay{display:flex;align-items:center;justify-content:space-between;padding:9px 4px;border-top:1px solid #f1e5de;font-size:12px}.closedDay button{border:0;background:#f8e7e2;color:#94493c;border-radius:10px;padding:7px 9px;font-weight:800}
 </style>
 </head>
 <body>
@@ -36,7 +37,7 @@ body{padding-bottom:max(28px,env(safe-area-inset-bottom))}
   <div class="loginCard">
     <h1>巧克力預約管理 ♡</h1>
     <p>這個頁面只給巧克力自己使用。手機確認訂金後，可以直接鎖定時段；沒有付款或取消時，一鍵把時段重新開放。</p>
-    <input id="adminKey" class="control" type="password" inputmode="numeric" pattern="[0-9]*" autocomplete="current-password" placeholder="管理密碼（數字）">
+    <input id="adminKey" class="control" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="10" autocomplete="current-password" placeholder="輸入管理密碼">
     <button class="primary" onclick="loginAdmin()">進入預約管理</button>
   </div>
 </section>
@@ -49,6 +50,13 @@ body{padding-bottom:max(28px,env(safe-area-inset-bottom))}
     <button class="tab" data-filter="released" onclick="setFilter('released',this)">已釋放</button>
   </div>
   <div id="summary" class="summary"></div>
+  <section class="vacationBox">
+    <button class="vacationToggle" onclick="toggleVacation()">休假日設定</button>
+    <div id="vacationPanel" class="vacationPanel">
+      <div class="vacationRow"><input id="closedDate" class="control" type="date"><button class="btn confirm" onclick="setClosedDay(true)">設為休假</button></div>
+      <div id="closedDaysList" class="closedDaysList"></div>
+    </div>
+  </section>
   <div id="list" class="list"></div>
 </section>
 </main>
@@ -198,6 +206,27 @@ function toast(t){
   el.textContent=t;el.classList.add('show');
   clearTimeout(toast._t);toast._t=setTimeout(()=>el.classList.remove('show'),4200);
 }
+
+function toggleVacation(){
+  const p=document.getElementById('vacationPanel'); p.classList.toggle('show');
+  if(p.classList.contains('show')) loadClosedDays();
+}
+async function loadClosedDays(){
+  try{
+    const now=new Date(), month=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+    const r=await jsonp({action:'admin_closed_days',adminKey,month});
+    const box=document.getElementById('closedDaysList'), items=r.items||[];
+    box.innerHTML=items.length?items.map(x=>`<div class="closedDay"><span>${escapeHtml(x.date.replaceAll('-','/'))}</span><button onclick="removeClosedDay('${x.date}')">恢復開放</button></div>`).join(''):'<div class="empty" style="margin:12px 0">本月尚未設定休假日</div>';
+  }catch(e){toast(e.message||'讀取休假日失敗')}
+}
+async function setClosedDay(closed,dateOverride){
+  const date=dateOverride||document.getElementById('closedDate').value;
+  if(!date){toast('請先選日期');return}
+  await fetch(API_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},body:new URLSearchParams({action:'admin_closed_day_update',adminKey,date,closed:String(closed)})});
+  toast(closed?'已設為休假日':'已恢復開放'); setTimeout(loadClosedDays,400);
+}
+function removeClosedDay(date){setClosedDay(false,date)}
+
 function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function js(s){return String(s??'').replace(/\\/g,'\\\\').replace(/'/g,"\\'")}
 
