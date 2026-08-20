@@ -72,7 +72,7 @@ input[type="date"]::-webkit-date-and-time-value{
   <p>選一個重要日子，把漂亮的時間先留給你 ♡</p>
 </section>
 
-<div id="lineState" class="lineState">正在連接 LINE…</div>
+<div id="lineState" class="lineState hidden" aria-live="polite"></div>
 
 <div class="oaCard" style="margin:0 16px 14px;">
   <b>預約小提醒 ♡</b><br>
@@ -180,6 +180,15 @@ input[type="date"]::-webkit-date-and-time-value{
 <div id="result"></div>
 </main>
 
+<div id="brandModal" class="brandModal" role="dialog" aria-modal="true" aria-labelledby="brandModalTitle">
+  <div class="brandModalCard">
+    <div class="brandModalMagic">🪄</div>
+    <h3 id="brandModalTitle" class="brandModalTitle"></h3>
+    <p id="brandModalText" class="brandModalText"></p>
+    <div id="brandModalActions" class="brandModalActions"></div>
+  </div>
+</div>
+
 <script>
 const LIFF_ID = '2011180525-A26EBkIG';
 const API_URL = 'https://script.google.com/macros/s/AKfycbxi5rwWSixQ7qAH39WSwfI6EQVkUgKRrAkVR7btnLeq_8LaOWFtmrhr0QM7FkNrDQHPSA/exec';
@@ -187,9 +196,62 @@ let serviceId='',timer=null,lineReady=false,lineIdToken='',lineAccessToken='';
 const names={registration:'登記妝髮',wedding:'結婚專區',makeover:'妝髮換頭魔法'};
 const $=id=>document.getElementById(id);
 
-async function initLiff(){
+
+function showBrandModal({
+  title='',
+  text='',
+  icon='🪄',
+  primaryText='確定',
+  secondaryText='',
+  onPrimary=null,
+  onSecondary=null
+}={}){
+  $('brandModalTitle').textContent=title;
+  $('brandModalText').textContent=text;
+  document.querySelector('.brandModalMagic').textContent=icon;
+
+  const actions=$('brandModalActions');
+  actions.innerHTML='';
+
+  if(secondaryText){
+    const secondary=document.createElement('button');
+    secondary.type='button';
+    secondary.className='brandModalBtn secondary';
+    secondary.textContent=secondaryText;
+    secondary.onclick=()=>{
+      hideBrandModal();
+      if(onSecondary)onSecondary();
+    };
+    actions.appendChild(secondary);
+  }
+
+  const primary=document.createElement('button');
+  primary.type='button';
+  primary.className='brandModalBtn primary';
+  primary.textContent=primaryText;
+  primary.onclick=()=>{
+    hideBrandModal();
+    if(onPrimary)onPrimary();
+  };
+  actions.appendChild(primary);
+
+  $('brandModal').classList.add('show');
+}
+
+function hideBrandModal(){
+  $('brandModal').classList.remove('show');
+}
+
+async function connectLineForBooking(){
   try{
-    await liff.init({liffId:LIFF_ID});
+    if(!window.liff){
+      showBrandModal({
+        title:'LINE 連線暫時沒有成功',
+        text:'請從巧克力的 LINE 官方帳號重新開啟預約頁 ♡',
+        primaryText:'知道了'
+      });
+      return;
+    }
 
     if(!liff.isLoggedIn()){
       liff.login({redirectUri:location.href});
@@ -198,30 +260,45 @@ async function initLiff(){
 
     lineIdToken = liff.getIDToken() || '';
     lineAccessToken = liff.getAccessToken() || '';
-
-    let name = '';
-    try{
-      const d = liff.getDecodedIDToken();
-      if(d && d.name) name = d.name;
-    }catch(_){}
-
-    // 有 ID token 或 LIFF access token 任何一種，就視為可驗證 LINE 身分。
     lineReady = !!(lineIdToken || lineAccessToken);
 
-    if(lineReady){
-      $('lineState').className='lineState ok';
-      $('lineState').textContent='✓ LINE 已連接' + (name ? '｜'+name : '');
-    }else{
-      // 不再擋住預約流程；仍可建立預約，只是無法自動回傳至聊天。
-      $('lineState').className='lineState';
-      $('lineState').textContent='LINE 身分暫時沒有讀取到，仍可先完成預約。';
+    if(!lineReady){
+      showBrandModal({
+        title:'還差一點點就連上 LINE 了',
+        text:'請關閉這個頁面，再從巧克力的 LINE 官方帳號重新開啟一次預約 ♡',
+        primaryText:'知道了'
+      });
     }
   }catch(e){
     console.error(e);
-    // 不阻擋使用者預約。
-    $('lineState').className='lineState';
-    $('lineState').textContent='LINE 連線暫時不穩定，仍可先完成預約。';
+    showBrandModal({
+      title:'LINE 連線暫時沒有成功',
+      text:'請從巧克力的 LINE 官方帳號重新開啟預約頁 ♡',
+      primaryText:'知道了'
+    });
+  }
+}
+
+async function initLiff(){
+  try{
+    await liff.init({liffId:LIFF_ID});
+
+    if(liff.isLoggedIn()){
+      lineIdToken = liff.getIDToken() || '';
+      lineAccessToken = liff.getAccessToken() || '';
+      lineReady = !!(lineIdToken || lineAccessToken);
+    }else{
+      lineReady = false;
+    }
+
+    // 首頁不顯示 LINE 連線狀態。
+    $('lineState').className='lineState hidden';
+    $('lineState').textContent='';
+  }catch(e){
+    console.error(e);
     lineReady=false;
+    $('lineState').className='lineState hidden';
+    $('lineState').textContent='';
   }
 }
 
@@ -283,7 +360,11 @@ function preventPastDate(){
 
   if(value && value <= today){
     $('date').value='';
-    alert('今天的魔法時段已經收單囉＞＜\n請幫我選明天之後的日期 ♡');
+    showBrandModal({
+      title:'今天的魔法時段已經收單囉🪄',
+      text:'請幫我選明天之後的日期 ･.｡*･.｡*',
+      primaryText:'重新選日期'
+    });
     return false;
   }
   return true;
@@ -351,7 +432,11 @@ function validateNotPast(){
   const now=new Date();
 
   if(selected.getTime() <= now.getTime()){
-    alert('這個時間已經跑掉了＞＜\n請幫我選現在之後的時間 ♡');
+    showBrandModal({
+      title:'這個時間已經跑掉了＞＜',
+      text:'請幫我選現在之後的時間 ♡',
+      primaryText:'重新選時間'
+    });
     return false;
   }
 
@@ -446,6 +531,17 @@ async function pollStatus(requestId){
 }
 
 async function submitBooking(){
+  if(!lineReady){
+    showBrandModal({
+      title:'先幫你連上 LINE ♡',
+      text:'完成連線後，預約資料才能自動回傳到巧克力的官方帳號。',
+      primaryText:'連接 LINE',
+      secondaryText:'先等等',
+      onPrimary:connectLineForBooking
+    });
+    return;
+  }
+
   if(!lineReady||!lineIdToken){notice('bad','請先完成 LINE 登入，再送出預約。');return}
   const p=payload();
   Object.assign(p,{
