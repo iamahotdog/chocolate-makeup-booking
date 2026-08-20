@@ -57,6 +57,94 @@ input[type="date"]::-webkit-date-and-time-value{
 .submit{width:100%;border:0;border-radius:14px;padding:13px;background:linear-gradient(#7b5039,#613928);color:#fff;font-weight:800;box-shadow:0 4px 0 #46291e;transition:.08s}.submit:active{transform:translateY(4px);box-shadow:0 0 0 #46291e}.submit:disabled{opacity:.55}
 .success{margin:22px 15px;padding:21px;border-radius:22px;background:var(--green);color:var(--greenInk);box-shadow:var(--shadow)}.success h2{margin:0 0 10px;font-size:24px}.success p{font-size:13px;line-height:1.7}.success .next{padding-top:14px;margin-top:14px;border-top:1px solid rgba(45,106,66,.15);font-size:12px;line-height:1.65}
 @media(min-width:600px){.app{max-width:430px;margin:auto}}
+
+.brandModal{
+  position:fixed !important;
+  inset:0 !important;
+  z-index:2147483000 !important;
+  display:none;
+  align-items:center;
+  justify-content:center;
+  width:100vw;
+  height:100dvh;
+  min-height:100vh;
+  padding:24px;
+  margin:0;
+  background:rgba(52,34,25,.48);
+  backdrop-filter:blur(3px);
+  -webkit-backdrop-filter:blur(3px);
+}
+.brandModal.show{
+  display:flex !important;
+}
+.brandModalCard{
+  position:relative;
+  width:min(100%,340px);
+  max-height:calc(100dvh - 48px);
+  overflow:auto;
+  padding:24px 20px 18px;
+  margin:0;
+  border:1px solid var(--line);
+  border-radius:24px;
+  background:#fffdfb;
+  box-shadow:0 24px 70px rgba(50,30,21,.25);
+  text-align:center;
+}
+.brandModalMagic{
+  width:44px;
+  height:44px;
+  display:grid;
+  place-items:center;
+  margin:0 auto 12px;
+  border-radius:15px;
+  background:#f8eee8;
+  font-size:23px;
+}
+.brandModalTitle{
+  margin:0 0 8px;
+  color:var(--ink);
+  font-size:20px;
+  line-height:1.45;
+  font-weight:800;
+}
+.brandModalText{
+  margin:0;
+  color:var(--muted);
+  font-size:13px;
+  line-height:1.75;
+  white-space:pre-line;
+}
+.brandModalActions{
+  display:flex;
+  gap:10px;
+  margin-top:18px;
+}
+.brandModalBtn{
+  min-width:0;
+  flex:1;
+  border:0;
+  border-radius:14px;
+  padding:12px 13px;
+  font-weight:800;
+}
+.brandModalBtn.primary{
+  color:#fff;
+  background:linear-gradient(#7b5039,#613928);
+  box-shadow:0 3px 0 #46291e;
+}
+.brandModalBtn.primary:active{
+  transform:translateY(3px);
+  box-shadow:none;
+}
+.brandModalBtn.secondary{
+  color:var(--brown);
+  background:#f7eee8;
+}
+body.modalOpen{
+  overflow:hidden !important;
+  touch-action:none;
+}
+
 </style>
 </head>
 <body>
@@ -164,7 +252,7 @@ input[type="date"]::-webkit-date-and-time-value{
   <div id="availability" class="notice">選好日期與時間後，巧克力幫你看看檔期 ♡</div>
 
   <div class="field"><label>怎麼稱呼你？</label><input id="name" class="control" autocomplete="name" placeholder="姓名"></div>
-  <div class="field"><label>聯絡手機</label><input id="phone" class="control" inputmode="tel" autocomplete="tel" placeholder="09xx-xxx-xxx"></div>
+  <div class="field"><label>聯絡手機</label><input id="phone" class="control" type="tel" inputmode="numeric" autocomplete="tel" maxlength="10" pattern="[0-9]{10}" placeholder="0912345678"></div>
   <div class="field"><label>在哪裡開妝？</label><select id="location" class="control" onchange="toggleArea()"></select></div>
   <div id="areaField" class="field hidden"><label>到府的大概地區</label><input id="area" class="control" placeholder="例如：中壢區"><div class="helper">詳細地址之後在 LINE 再確認即可。</div></div>
   <div class="field"><label>有沒有一定要先告訴巧克力的事？ <span style="font-weight:400;color:#9a7c6d">（選填）</span></label><textarea id="note" class="control" rows="3" placeholder="例如：12:00前需要完成、特殊行程安排等"></textarea></div>
@@ -236,10 +324,32 @@ function showBrandModal({
   actions.appendChild(primary);
 
   $('brandModal').classList.add('show');
+  document.body.classList.add('modalOpen');
 }
 
 function hideBrandModal(){
   $('brandModal').classList.remove('show');
+  document.body.classList.remove('modalOpen');
+}
+
+
+async function refreshLineIdentity(){
+  if(!window.liff) return false;
+
+  try{
+    if(!liff.isLoggedIn()) return false;
+
+    lineIdToken = liff.getIDToken() || '';
+    lineAccessToken = liff.getAccessToken() || '';
+
+    // ID token 需要 openid；access token 可作為後端驗證備援。
+    lineReady = !!(lineIdToken || lineAccessToken);
+    return lineReady;
+  }catch(e){
+    console.error('refreshLineIdentity',e);
+    lineReady=false;
+    return false;
+  }
 }
 
 async function connectLineForBooking(){
@@ -258,11 +368,16 @@ async function connectLineForBooking(){
       return;
     }
 
-    lineIdToken = liff.getIDToken() || '';
-    lineAccessToken = liff.getAccessToken() || '';
-    lineReady = !!(lineIdToken || lineAccessToken);
+    const ok = await refreshLineIdentity();
 
-    if(!lineReady){
+    if(ok){
+      // 連線成功後不額外顯示技術字眼，直接讓使用者再按一次送出。
+      showBrandModal({
+        title:'LINE 已經準備好囉 ♡',
+        text:'可以繼續送出預約了。',
+        primaryText:'繼續預約'
+      });
+    }else{
       showBrandModal({
         title:'還差一點點就連上 LINE 了',
         text:'請關閉這個頁面，再從巧克力的 LINE 官方帳號重新開啟一次預約 ♡',
@@ -284,14 +399,12 @@ async function initLiff(){
     await liff.init({liffId:LIFF_ID});
 
     if(liff.isLoggedIn()){
-      lineIdToken = liff.getIDToken() || '';
-      lineAccessToken = liff.getAccessToken() || '';
-      lineReady = !!(lineIdToken || lineAccessToken);
+      await refreshLineIdentity();
     }else{
-      lineReady = false;
+      lineReady=false;
     }
 
-    // 首頁不顯示 LINE 連線狀態。
+    // 首頁完全不顯示 LINE 技術狀態。
     $('lineState').className='lineState hidden';
     $('lineState').textContent='';
   }catch(e){
@@ -345,6 +458,10 @@ function initForm(){
 
   preventPastDate();
   updateTimeOptions();
+
+  $('phone').addEventListener('input',()=>{
+    $('phone').value=$('phone').value.replace(/\D/g,'').slice(0,10);
+  });
 }
 
 
@@ -362,7 +479,7 @@ function preventPastDate(){
     $('date').value='';
     showBrandModal({
       title:'今天的魔法時段已經收單囉🪄',
-      text:'請幫我選明天之後的日期 ･.｡*･.｡*',
+      text:'請幫我選明天之後的日期･.｡*',
       primaryText:'重新選日期'
     });
     return false;
@@ -491,12 +608,22 @@ function makeRequestId(){
 
 
 async function sendBookingSummaryToOfficialAccount(r,p){
-  // liff.sendMessages() 需要：
-  // 1. 從 LINE App 內的聊天開啟 MINI App
-  // 2. Channel scope 開啟 chat_message.write
-  if(!window.liff || !liff.isInClient())return false;
+  if(!window.liff || !liff.isInClient()) return false;
 
   try{
+    // LINE MINI App 的 chat_message.write 可能需要使用者在實際使用時授權。
+    if(liff.permission && liff.permission.query){
+      const permission = await liff.permission.query('chat_message.write');
+
+      if(
+        permission &&
+        permission.state === 'prompt' &&
+        liff.permission.requestAll
+      ){
+        await liff.permission.requestAll();
+      }
+    }
+
     await liff.sendMessages([
       {
         type:'text',
@@ -513,6 +640,7 @@ async function sendBookingSummaryToOfficialAccount(r,p){
           '\n※目前僅為預定時間，完成訂金支付後才正式保留時段。'
       }
     ]);
+
     return true;
   }catch(err){
     console.warn('liff.sendMessages failed',err);
@@ -532,17 +660,20 @@ async function pollStatus(requestId){
 
 async function submitBooking(){
   if(!lineReady){
-    showBrandModal({
-      title:'先幫你連上 LINE ♡',
-      text:'完成連線後，預約資料才能自動回傳到巧克力的官方帳號。',
-      primaryText:'連接 LINE',
-      secondaryText:'先等等',
-      onPrimary:connectLineForBooking
-    });
-    return;
+    const refreshed = await refreshLineIdentity();
+
+    if(!refreshed){
+      showBrandModal({
+        title:'送出前先連一下 LINE ♡',
+        text:'連線完成後，預約資料會自動回傳到巧克力的官方帳號。',
+        primaryText:'連接 LINE',
+        secondaryText:'先等等',
+        onPrimary:connectLineForBooking
+      });
+      return;
+    }
   }
 
-  if(!lineReady||!lineIdToken){notice('bad','請先完成 LINE 登入，再送出預約。');return}
   const p=payload();
   Object.assign(p,{
     action:'book',
@@ -557,6 +688,7 @@ async function submitBooking(){
   });
 
   if(!p.name||!p.phone||!p.locationType){notice('bad','還差姓名、手機或開妝地點沒有填完喔。');return}
+  if(!/^09\d{8}$/.test(p.phone)){notice('bad','手機號碼請輸入 10 碼，例如 0912345678 ♡');return}
   if(p.locationType==='到府服務'&&!p.area){notice('bad','到府服務先告訴巧克力大概在哪一區就好。');return}
 
   const b=$('submit');
