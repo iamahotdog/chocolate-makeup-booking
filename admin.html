@@ -36,7 +36,7 @@ body{padding-bottom:max(28px,env(safe-area-inset-bottom))}
   <div class="loginCard">
     <h1>巧克力預約管理 ♡</h1>
     <p>這個頁面只給巧克力自己使用。手機確認訂金後，可以直接鎖定時段；沒有付款或取消時，一鍵把時段重新開放。</p>
-    <input id="adminKey" class="control" type="password" autocomplete="current-password" placeholder="管理密碼">
+    <input id="adminKey" class="control" type="password" inputmode="numeric" pattern="[0-9]*" autocomplete="current-password" placeholder="管理密碼（數字）">
     <button class="primary" onclick="loginAdmin()">進入預約管理</button>
   </div>
 </section>
@@ -61,6 +61,7 @@ const API_URL='https://script.google.com/macros/s/AKfycbxi5rwWSixQ7qAH39WSwfI6EQ
 let adminKey=sessionStorage.getItem('choco_admin_key')||'';
 let filter='pending';
 let pendingAction=null;
+let loadSeq=0;
 
 function jsonp(params){
   return new Promise((resolve,reject)=>{
@@ -74,6 +75,8 @@ function jsonp(params){
     setTimeout(()=>{if(window[cb]){cleanup();reject(new Error('連線逾時'))}},9000);
   });
 }
+
+document.getElementById('adminKey').addEventListener('input',e=>{e.target.value=e.target.value.replace(/\D/g,'')});
 
 async function loginAdmin(){
   const key=document.getElementById('adminKey').value.trim();
@@ -92,13 +95,16 @@ async function loginAdmin(){
 }
 
 async function load(){
+  const seq=++loadSeq;
   const list=document.getElementById('list');
   list.innerHTML='<div class="loading">正在整理預約…</div>';
   try{
-    const r=await jsonp({action:'admin_list',adminKey,filter});
+    const r=await jsonp({action:'admin_list',adminKey,filter,_ts:Date.now()});
+    if(seq!==loadSeq) return; // 舊請求晚回來時，不覆蓋最新畫面。
     if(!r.ok && r.message)throw new Error(r.message);
     render(r.items||[]);
   }catch(e){
+    if(seq!==loadSeq) return;
     list.innerHTML='<div class="empty">'+escapeHtml(e.message||'讀取失敗')+'</div>';
   }
 }
@@ -168,29 +174,29 @@ function askAction(id,action,name){
 function hideModal(){document.getElementById('modal').classList.remove('show')}
 
 async function runAction(id,action){
-  const requestId=(crypto.randomUUID?crypto.randomUUID():Date.now()+'-'+Math.random().toString(36).slice(2));
   toast('正在更新…');
   try{
-    await fetch(API_URL,{
-      method:'POST',
-      mode:'no-cors',
-      headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},
-      body:new URLSearchParams({action:'admin_update',adminKey,requestId,bookingId:id,adminAction:action})
+    const r=await jsonp({
+      action:'admin_action',
+      adminKey,
+      bookingId:id,
+      adminAction:action,
+      _ts:Date.now()
     });
-    for(let i=0;i<16;i++){
-      await new Promise(r=>setTimeout(r,350));
-      const s=await jsonp({action:'admin_status',adminKey,requestId});
-      if(s.status==='success'){toast(s.message||'已更新');await load();return}
-      if(s.status==='error')throw new Error(s.message||'更新失敗');
-    }
-    throw new Error('更新較久，請重新整理確認');
-  }catch(e){toast(e.message||'更新失敗')}
+    if(!r.ok) throw new Error(r.message||'更新失敗');
+
+    const msg=[r.message,r.lineNotice].filter(Boolean).join(' ');
+    toast(msg||'已更新');
+    await load();
+  }catch(e){
+    toast(e.message||'更新失敗');
+  }
 }
 
 function toast(t){
   const el=document.getElementById('toast');
   el.textContent=t;el.classList.add('show');
-  clearTimeout(toast._t);toast._t=setTimeout(()=>el.classList.remove('show'),2200);
+  clearTimeout(toast._t);toast._t=setTimeout(()=>el.classList.remove('show'),4200);
 }
 function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function js(s){return String(s??'').replace(/\\/g,'\\\\').replace(/'/g,"\\'")}
