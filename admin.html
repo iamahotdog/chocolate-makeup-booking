@@ -101,7 +101,7 @@ body{padding-bottom:max(28px,env(safe-area-inset-bottom))}
 <section id="login" class="login">
   <div class="loginCard">
     <h1>巧克力預約管理 ♡</h1>
-    <p>這個頁面只給巧克力自己使用。手機確認訂金後，可以直接鎖定時段；沒有付款或取消時，一鍵把時段重新開放。</p>
+    <p>巧克力手機管理頁。確認訂金、釋放時段與休假設定都可以直接在這裡完成。</p>
     <input id="adminKey" class="control" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="10" autocomplete="current-password" placeholder="輸入管理密碼">
     <button class="primary" onclick="loginAdmin()">進入預約管理</button>
   </div>
@@ -203,18 +203,38 @@ async function loginAdmin(){
   }
 }
 
-async function load(){
-  const seq=++loadSeq;
-  const list=document.getElementById('list');
-  list.innerHTML='<div class="loading">正在整理預約…</div>';
+
+function adminLocalCacheGet(filter){
   try{
-    const r=await jsonp({action:'admin_list',adminKey,filter,_ts:Date.now()});
-    if(seq!==loadSeq) return; // 舊請求晚回來時，不覆蓋最新畫面。
+    const raw=sessionStorage.getItem('choco_list_'+filter);
+    if(!raw)return null;
+    const obj=JSON.parse(raw);
+    if(Date.now()-obj.ts>30000)return null;
+    return obj.items||[];
+  }catch(_){return null}
+}
+function adminLocalCacheSet(filter,items){
+  try{sessionStorage.setItem('choco_list_'+filter,JSON.stringify({ts:Date.now(),items}))}catch(_){}
+}
+
+async function load(){
+  const list=document.getElementById('list');
+  const cached=adminLocalCacheGet(filter);
+  if(cached){
+    render(cached);
+  }else{
+    list.innerHTML='<div class="loading">正在整理預約…</div>';
+  }
+
+  try{
+    const r=await jsonp({action:'admin_list',adminKey,filter});
     if(!r.ok && r.message)throw new Error(r.message);
-    render(r.items||[]);
+    const items=r.items||[];
+    adminLocalCacheSet(filter,items);
+    render(items);
   }catch(e){
-    if(seq!==loadSeq) return;
-    list.innerHTML='<div class="empty">'+escapeHtml(e.message||'讀取失敗')+'</div>';
+    if(!cached) list.innerHTML='<div class="empty">'+escapeHtml(e.message||'讀取失敗')+'</div>';
+    else toast('更新稍慢，先顯示最近資料');
   }
 }
 

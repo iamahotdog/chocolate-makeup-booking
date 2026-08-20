@@ -336,6 +336,19 @@ body.modalOpen{
   line-height:1.45;
 }
 
+
+.publicBookingNote{
+  margin:0 16px 13px;
+  padding:11px 13px;
+  border:1px solid #ead7cc;
+  border-radius:14px;
+  background:#fffaf6;
+  color:#8a6b5f;
+  font-size:11.5px;
+  line-height:1.65;
+}
+.publicBookingNote b{color:#6a4230}
+
 </style>
 </head>
 <body>
@@ -353,6 +366,11 @@ body.modalOpen{
 
 <div id="lineState" class="lineState hidden" aria-live="polite"></div>
 
+
+<div class="publicBookingNote">
+  <b>公開預約 ♡</b>
+  不需要 LINE 登入也可以直接填寫；送出後再回 LINE 與巧克力討論妝造細節即可。
+</div>
 <section id="services" class="services">
   <article class="service">
     <div class="icon">🥨</div>
@@ -541,7 +559,7 @@ body.modalOpen{
 </div>
 
 <script>
-const LIFF_ID = '2011180525-A26EBkIG';
+const LIFF_ID = '2011180527-2I2I2ztI';
 const API_URL = 'https://script.google.com/macros/s/AKfycbxi5rwWSixQ7qAH39WSwfI6EQVkUgKRrAkVR7btnLeq_8LaOWFtmrhr0QM7FkNrDQHPSA/exec';
 let serviceId='',timer=null,lineReady=false,lineIdToken='',lineAccessToken='',suppressDateModal=false;
 const names={registration:'登記妝髮',wedding:'拍婚紗專區',makeover:'妝髮換頭魔法'};
@@ -692,6 +710,7 @@ function initForm(){
     const v=String(i).padStart(2,'0');
     $('minute').innerHTML+=`<option value="${v}">${v}</option>`;
   }
+  $('minute').value='00';
 
   const now=new Date();
   const localToday=
@@ -712,6 +731,7 @@ function initForm(){
   $('date').addEventListener('change',()=>{
     if(!validateBookingDateFromUser()) return;
     updateTimeOptions();
+    refreshAllowedTimeOptions();
     scheduleCheck();
   });
 
@@ -724,6 +744,7 @@ function initForm(){
   $('minute').addEventListener('change',scheduleCheck);
 
   updateTimeOptions();
+  refreshAllowedTimeOptions();
 
   $('phone').addEventListener('input',()=>{
     $('phone').value=$('phone').value.replace(/\D/g,'').slice(0,10);
@@ -1039,9 +1060,8 @@ async function sendBookingSummaryToOfficialAccount(r,p){
       {
         type:'text',
         text:
-          '🥨 預約資料已填寫完成\n'+
-          '服務：'+r.service+'\n'+          r.id+'\n'+
-
+          '🥨 預約已填寫完成 🥨\n'+
+          '服務：'+r.service+'\n'+
           '預約時間：'+displayDateTime(r.date,r.time)+'\n'+
           '姓名：'+p.name+'\n'+
           '手機：'+p.phone+'\n'+
@@ -1050,9 +1070,9 @@ async function sendBookingSummaryToOfficialAccount(r,p){
           (p.locationType==='到府服務／自選地點' ? '\n※將依實際地點確認交通與到府費用' : '')+'\n'+
           extra+
           (p.note ? '其他補充：'+p.note+'\n' : '')+
-          '\n🥖 記得私訊巧克力討論妝造細節
-🍞 請提供 1 張面光清楚的素顏照
-🥐 再提供 2 張能清楚看見五官的生活照'
+          '\n🥖 接下來再麻煩私訊巧克力討論妝造細節 ♡\n'+
+          '🍞 請提供 1 張面光、清楚的素顏照\n'+
+          '🥐 再提供 2 張能清楚看見五官的生活照'
       }
     ]);
 
@@ -1064,13 +1084,14 @@ async function sendBookingSummaryToOfficialAccount(r,p){
 }
 
 async function pollStatus(requestId){
-  for(let i=0;i<24;i++){
-    await new Promise(r=>setTimeout(r,180));
+  const waits=[100,140,180,220,260,320,400,500,650,800,1000,1200];
+  for(const wait of waits){
+    await new Promise(r=>setTimeout(r,wait));
     const s=await jsonp({action:'status',requestId});
-    if(s&&s.status==='success')return s;
-    if(s&&s.status==='error')throw new Error(s.message||'預約失敗');
+    if(s.status==='success') return s;
+    if(s.status==='error') throw new Error(s.message||'預約建立失敗');
   }
-  throw new Error('系統回應較久，請稍後確認 LINE 訊息。');
+  throw new Error('預約處理時間較久，請稍後重新確認。');
 }
 
 
@@ -1122,21 +1143,6 @@ function validateRequiredFields(){
 
 async function submitBooking(){
   if(!validateRequiredFields()) return;
-  if(!lineReady){
-    const refreshed = await refreshLineIdentity();
-
-    if(!refreshed){
-      showBrandModal({
-        title:'送出前先連一下 LINE ♡',
-        text:'連線完成後，預約資料會自動回傳到巧克力的官方帳號。',
-        primaryText:'連接 LINE',
-        secondaryText:'先等等',
-        onPrimary:connectLineForBooking
-      });
-      return;
-    }
-  }
-
   const p=payload();
   Object.assign(p,{
     action:'book',
@@ -1155,10 +1161,7 @@ async function submitBooking(){
     accessoryRental:serviceId==='makeover' ? $('accessoryRental').value : '',
     hasElevator:(serviceId==='wedding' && $('location').value==='到府服務／自選地點') ? $('hasElevator').value : '',
     weddingStyle:serviceId==='wedding' ? $('weddingStyle').value.trim() : '',
-    weddingShootLocation:serviceId==='wedding' ? $('weddingShootLocation').value.trim() : '',
-    idToken:lineIdToken,
-    accessToken:lineAccessToken
-  });
+    weddingShootLocation:serviceId==='wedding' ? $('weddingShootLocation').value.trim() : ''});
 
   if(!p.name||!p.phone||!p.locationType){notice('bad','還差姓名、手機或開妝地點沒有填完喔。');return}
   if(!/^09\d{8}$/.test(p.phone)){notice('bad','手機號碼請輸入 10 碼，例如 0912345678 ♡');return}
@@ -1179,7 +1182,10 @@ async function submitBooking(){
     });
 
     const r=await pollStatus(p.requestId);
-    const sentToChat=lineReady ? await sendBookingSummaryToOfficialAccount(r,p) : false;
+    let sentToChat=false;
+    if(lineReady && window.liff && liff.isInClient()){
+      try{ sentToChat=await sendBookingSummaryToOfficialAccount(r,p); }catch(_){}
+    }
     $('formPage').style.display='none';
     $('result').innerHTML=`<section class="successWarm">
       <div class="successHero">
@@ -1216,7 +1222,9 @@ async function submitBooking(){
 }
 
 initForm();
-initLiff();
+if(window.liff){
+  initLiff().catch(()=>{});
+}
 </script>
 </body>
 </html>
