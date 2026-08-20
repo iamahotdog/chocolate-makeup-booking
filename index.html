@@ -321,15 +321,6 @@ body.modalOpen{
   font-weight:700;
   color:#5d392a;
 }
-.accessoryDetail{
-  margin:0;
-  text-align:left;
-  color:#8a6b5f;
-  font-size:14px;
-  line-height:1.75;
-}
-
-
 .requiredLabel::after{
   content:" *";
   color:#a95f4c;
@@ -376,7 +367,7 @@ body.modalOpen{
   <article class="service">
     <div class="icon">📷</div>
     <div class="serviceText">
-      <h2>拍婚紗妝髮</h2>
+      <h2>拍婚紗專區</h2>
       <p>拍婚紗妝髮。<span class="serviceNote">暫不提供婚禮當日妝髮服務</span></p>
       <span class="meta">女生約3小時／男生約1小時</span>
     </div>
@@ -399,15 +390,13 @@ body.modalOpen{
       <div class="serviceText">
         <h2>1 對 1 美妝教學</h2>
         <p>從0開始、精緻升級，或加強特定妝容技巧都適合。</p>
-        <span class="meta">2027 農曆年前時段皆已完售！感謝支持 ♡</span>
+        <span class="meta">2027 農曆年前時段皆已全數售完 🈵</span>
       </div>
       <button class="bookBtn" disabled style="opacity:.55">完售</button>
     </div>
     <div class="oaCard" style="margin:12px 0 0;">
       🥨 11:00–15:00，一次4小時（不接受加時）<br>
       ❗ 目前僅開放假日預約；若因職業或個人因素僅能平日／假日晚間，再私訊巧克力討論<br>
-      忠孝復興工作室 $3,200<br>
-      鶯歌居家工作室 $2,700（有貓🐈，怕貓者勿選）<br>
       2027 年 1 月時段歡迎再詢問 ♡
     </div>
   </article>
@@ -425,7 +414,7 @@ body.modalOpen{
   <div class="field"><label class="requiredLabel">想預約哪一天？</label><input id="date" class="control" type="date" aria-label="預約日期" required></div>
   <div class="field">
     <label class="requiredLabel">希望幾點開始？</label>
-    <div class="timeGrid"><select id="hour" class="control" required></select><div class="colon">:</div><select id="minute" class="control" required></select></div>
+    <div class="timeGrid"><select id="hour" class="control" required></select><div class="colon">:</div><select id="minute" class="control" required></select></div><div class="fieldHint">開放時段：10:00–12:30、14:00 之後。</div>
     
   </div>
 
@@ -483,7 +472,6 @@ body.modalOpen{
         <option value="否">不需要</option>
         <option value="是">需要</option>
       </select>
-      <button type="button" class="detailLink" onclick="showAccessoryDetails()">查看租借詳情🥨</button>
     </div>
   </div>
 
@@ -506,7 +494,6 @@ body.modalOpen{
         <option value="否">不需要</option>
         <option value="是">需要</option>
       </select>
-      <button type="button" class="detailLink" onclick="showAccessoryDetails()">查看租借詳情🥨</button>
     </div>
   </div>
 
@@ -557,7 +544,7 @@ body.modalOpen{
 const LIFF_ID = '2011180525-A26EBkIG';
 const API_URL = 'https://script.google.com/macros/s/AKfycbxi5rwWSixQ7qAH39WSwfI6EQVkUgKRrAkVR7btnLeq_8LaOWFtmrhr0QM7FkNrDQHPSA/exec';
 let serviceId='',timer=null,lineReady=false,lineIdToken='',lineAccessToken='',suppressDateModal=false;
-const names={registration:'登記妝髮',wedding:'結婚專區',makeover:'妝髮換頭魔法'};
+const names={registration:'登記妝髮',wedding:'拍婚紗專區',makeover:'妝髮換頭魔法'};
 const $=id=>document.getElementById(id);
 
 
@@ -671,13 +658,6 @@ async function connectLineForBooking(){
 }
 
 
-function showAccessoryDetails(){
-  showBrandModal({
-    title:'飾品租借說明🥨',
-    html:'<div class="accessoryDetail">∷ 租借費用 $400 與押金 $200<br>當日共收取 $600<br>飾品使用完畢後，請協助寄回。確認無缺少、無損害後，將退回押金 $200。</div>',
-    primaryText:'知道了'
-  });
-}
 
 async function initLiff(){
   try{
@@ -737,6 +717,7 @@ function initForm(){
 
   $('hour').addEventListener('change',()=>{
     updateMinuteOptionsForToday();
+    refreshAllowedTimeOptions();
     scheduleCheck();
   });
 
@@ -896,7 +877,7 @@ function openForm(id){
   $('registrationExtra').classList.toggle('hidden',id!=='registration');
   $('makeoverExtra').classList.toggle('hidden',id!=='makeover');
   $('weddingExtra').classList.toggle('hidden',id!=='wedding');
-  toggleArea();scheduleCheck();window.scrollTo({top:0,behavior:'smooth'});
+  toggleArea();refreshAllowedTimeOptions();scheduleCheck();window.scrollTo({top:0,behavior:'smooth'});
 }
 function backToServices(){$('formPage').style.display='none';$('services').style.display='block';window.scrollTo({top:0,behavior:'smooth'})}
 function step(id,d){let e=$(id),min=id==='sets'?1:0;e.value=Math.max(min,parseInt(e.value||0)+d);scheduleCheck()}
@@ -931,6 +912,52 @@ function toggleArea(){
     $('elevatorField').classList.toggle('hidden',!(serviceId==='wedding' && isHome));
   }
 }
+
+function isAllowedStartTime(time){
+  if(!time) return false;
+  const [h,m]=time.split(':').map(Number);
+  const mins=h*60+m;
+
+  // 上午：10:00～12:30（含）
+  if(mins >= 10*60 && mins <= 12*60+30) return true;
+
+  // 下午：14:00 以後
+  if(mins >= 14*60) return true;
+
+  return false;
+}
+
+function refreshAllowedTimeOptions(){
+  const hourEl=$('hour');
+  const minuteEl=$('minute');
+  if(!hourEl || !minuteEl) return;
+
+  // 先依小時判斷是否存在至少一個可選分鐘。
+  Array.from(hourEl.options).forEach(opt=>{
+    if(!opt.value) return;
+    const h=Number(opt.value);
+    const hasAllowed=[0,5,10,15,20,25,30,35,40,45,50,55]
+      .some(m=>isAllowedStartTime(String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')));
+    opt.disabled=!hasAllowed;
+  });
+
+  // 依目前選中的小時控制分鐘。
+  const h=hourEl.value;
+  Array.from(minuteEl.options).forEach(opt=>{
+    if(!opt.value) return;
+    opt.disabled = !h || !isAllowedStartTime(h+':'+opt.value);
+  });
+
+  if(hourEl.value && hourEl.selectedOptions[0] && hourEl.selectedOptions[0].disabled){
+    hourEl.value='';
+    minuteEl.value='';
+  }
+  if(minuteEl.value && minuteEl.selectedOptions[0] && minuteEl.selectedOptions[0].disabled){
+    minuteEl.value='';
+  }
+}
+
+
 function selectedTime(){return $('hour').value&&$('minute').value?$('hour').value+':'+$('minute').value:''}
 function payload(){return{serviceId,date:$('date').value,time:selectedTime(),femaleCount:$('female').value,maleCount:$('male').value,setCount:$('sets').value}}
 function notice(cls,msg){
