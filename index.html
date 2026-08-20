@@ -1157,7 +1157,7 @@ function jsonp(params){
     const q=new URLSearchParams({...params,callback:cb});
     s.src=API_URL+'?'+q.toString();
     document.body.appendChild(s);
-    setTimeout(()=>{if(window[cb]){cleanup();reject(new Error('timeout'))}},8000);
+    setTimeout(()=>{if(window[cb]){cleanup();reject(new Error('timeout'))}},10000);
   });
 }
 
@@ -1192,6 +1192,17 @@ function checkAvailability(){
   }).catch(()=>notice('bad','檔期確認較慢，請稍後再選一次時間。'));
 }
 
+
+async function postForm(data){
+  const body=new URLSearchParams();
+  Object.entries(data||{}).forEach(([k,v])=>body.append(k,String(v??'')));
+  await fetch(API_URL,{
+    method:'POST',
+    mode:'no-cors',
+    body
+  });
+}
+
 function makeRequestId(){
   if(window.crypto&&crypto.randomUUID)return crypto.randomUUID();
   return Date.now()+'-'+Math.random().toString(36).slice(2);
@@ -1204,65 +1215,8 @@ function displayDateTime(date,time){
   return (d && t) ? d+' '+t : (d || t);
 }
 
-async function sendBookingSummaryToOfficialAccount(r,p){
-  if(!window.liff || !liff.isInClient()) return false;
-
-  try{
-    if(liff.permission && liff.permission.query){
-      const permission = await liff.permission.query('chat_message.write');
-      if(permission && permission.state === 'prompt' && liff.permission.requestAll){
-        await liff.permission.requestAll();
-      }
-    }
-
-    let extra='';
-    if(p.serviceId==='registration'){
-      if(p.registrationStyle) extra+='妝造風格：'+p.registrationStyle+'\n';
-      if(p.registrationPhoto) extra+='登記攝影：'+p.registrationPhoto+'\n';
-      if(p.followMakeup) extra+='跟妝：'+p.followMakeup+'\n';
-      if(p.registrationAccessoryRental) extra+='租借飾品：'+p.registrationAccessoryRental+'\n';
-    }
-    if(p.serviceId==='makeover'){
-      if(p.makeupStyle) extra+='妝造風格：'+p.makeupStyle+'\n';
-      if(p.makeupPurpose) extra+='妝髮目的：'+p.makeupPurpose+'\n';
-      if(p.makeoverFollowMakeup) extra+='跟妝：'+p.makeoverFollowMakeup+'\n';
-      if(p.accessoryRental) extra+='租借飾品：'+p.accessoryRental+'\n';
-    }
-    if(p.serviceId==='wedding'){
-      if(p.hasElevator) extra+='電梯：'+p.hasElevator+'\n';
-      if(p.weddingStyle) extra+='妝造風格：'+p.weddingStyle+'\n';
-      if(p.weddingShootLocation) extra+='婚紗拍攝地點：'+p.weddingShootLocation+'\n';
-    }
-
-    await liff.sendMessages([
-      {
-        type:'text',
-        text:
-          '🥨 預約已填寫完成 🥨\n'+
-          '服務：'+r.service+'\n'+
-          '預約時間：'+displayDateTime(r.date,r.time)+'\n'+
-          '姓名：'+p.name+'\n'+
-          '手機：'+p.phone+'\n'+
-          '開妝地點：'+p.locationType+
-          (p.area ? '\n詳細地點：'+p.area : '')+
-          (p.locationType==='到府服務／自選地點' ? '\n※將依實際地點確認交通與到府費用' : '')+'\n'+
-          extra+
-          (p.note ? '其他補充：'+p.note+'\n' : '')+
-          '\n🥖 接下來再麻煩私訊巧克力討論妝造細節 ♡\n'+
-          '🍞 請提供 1 張面光、清楚的素顏照\n'+
-          '🥐 再提供 2 張能清楚看見五官的生活照'
-      }
-    ]);
-
-    return true;
-  }catch(err){
-    console.warn('liff.sendMessages failed',err);
-    return false;
-  }
-}
-
 async function pollStatus(requestId){
-  const waits=[100,140,180,220,260,320,400,500,650,800,1000,1200];
+  const waits=[40,70,100,140,180,240,320,450,650,900,1200];
   for(const wait of waits){
     await new Promise(r=>setTimeout(r,wait));
     const s=await jsonp({action:'status',requestId});
@@ -1409,12 +1363,7 @@ async function submitBooking(){
   notice('','正在送出資料…');
 
   try{
-    await fetch(API_URL,{
-      method:'POST',
-      mode:'no-cors',
-      headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},
-      body:new URLSearchParams(p)
-    });
+    await postForm(p);
 
     const r=await pollStatus(p.requestId);
 

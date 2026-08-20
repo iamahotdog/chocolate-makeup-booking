@@ -26,14 +26,12 @@ body{padding-bottom:max(28px,env(safe-area-inset-bottom))}
 .loading{padding:35px;text-align:center;color:var(--muted)}
 .toast{position:fixed;left:50%;bottom:24px;z-index:99;transform:translateX(-50%) translateY(30px);opacity:0;pointer-events:none;transition:.2s;padding:10px 14px;border-radius:999px;background:#4c3228;color:#fff;font-size:12px;box-shadow:0 8px 24px rgba(0,0,0,.18)}.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 .modal{position:fixed;inset:0;z-index:100;display:none;align-items:center;justify-content:center;padding:22px;background:rgba(50,32,23,.48);backdrop-filter:blur(3px)}.modal.show{display:flex}.modalCard{width:min(100%,350px);padding:21px;border-radius:22px;background:#fff;text-align:center;box-shadow:0 24px 60px rgba(0,0,0,.2)}.modalCard h3{margin:0 0 8px;font-size:20px}.modalCard p{margin:0;color:var(--muted);font-size:13px;line-height:1.7}.modalActions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin-top:17px}.modalActions button{border:0;border-radius:13px;padding:11px;font-weight:800}.cancel{background:#f4ece7;color:#76584b}.ok{background:var(--brown);color:#fff}
-.vacationBox{padding:4px 12px 7px}.vacationToggle{width:100%;border:1px solid var(--line);border-radius:14px;padding:11px;background:#fff;color:var(--brown);font-weight:850}.vacationPanel{display:none;margin-top:9px;padding:12px;border:1px solid var(--line);border-radius:17px;background:#fff}.vacationPanel.show{display:block}.vacationRow{display:grid;grid-template-columns:1fr 100px;gap:8px}.closedDaysList{margin-top:9px}.closedDay{display:flex;align-items:center;justify-content:space-between;padding:9px 4px;border-top:1px solid #f1e5de;font-size:12px}.closedDay button{border:0;background:#f8e7e2;color:#94493c;border-radius:10px;padding:7px 9px;font-weight:800}
-
 .managerNav{
   position:sticky;
   top:72px;
   z-index:18;
   display:grid;
-  grid-template-columns:1fr 1fr;
+  grid-template-columns:repeat(3,minmax(0,1fr));
   gap:6px;
   padding:9px 10px;
   background:rgba(255,248,243,.96);
@@ -167,6 +165,22 @@ body{padding-bottom:max(28px,env(safe-area-inset-bottom))}
 .timeBlockInfo{min-width:0;flex:1;font-size:11px;line-height:1.5}
 .timeBlockInfo b{display:block;font-size:12px}
 .timeBlockCancel{border:0;border-radius:10px;padding:7px 9px;background:#f8e7e2;color:#94493c;font-weight:800;font-size:10px}
+
+.blockDateRow{width:100%;min-width:0;overflow:hidden}
+.blockDateRow .control,
+#blockDate{
+  display:block;
+  width:100%;
+  max-width:100%;
+  min-width:0;
+  box-sizing:border-box;
+  font-size:16px;
+  padding-left:12px;
+  padding-right:12px;
+  -webkit-appearance:none;
+  appearance:none;
+}
+#blockDate::-webkit-date-and-time-value{text-align:left}
 </style>
 </head>
 <body>
@@ -283,7 +297,13 @@ let adminKey=sessionStorage.getItem('choco_admin_key')||'';
 let filter='pending';
 let adminLoadSeq=0;
 let pendingAction=null;
-let loadSeq=0;
+
+
+async function postForm(data){
+  const body=new URLSearchParams();
+  Object.entries(data||{}).forEach(([k,v])=>body.append(k,String(v??'')));
+  await fetch(API_URL,{method:'POST',mode:'no-cors',body});
+}
 
 function jsonp(params){
   return new Promise((resolve,reject)=>{
@@ -466,19 +486,18 @@ function fillBlockTimeOptions(){
   $('blockEnd').value='14:00';
 }
 
+
+function renderTimeBlocks(items){
+  const box=$('timeBlocksList');
+  if(!box)return;
+  box.innerHTML=items.length?items.map(x=>`<div class="timeBlockItem">
+    <div class="timeBlockInfo"><b>${escapeHtml(x.date.replaceAll('-','/'))}　${escapeHtml(x.start)}–${escapeHtml(x.end)}</b>${x.reason?escapeHtml(x.reason):''}</div>
+    <button class="timeBlockCancel" onclick="cancelTimeBlockAdmin('${x.id}')">恢復</button>
+  </div>`).join(''):'<div class="empty" style="margin:10px 0">本月沒有另外關閉的時段</div>';
+}
+
 async function loadTimeBlocksAdmin(){
-  try{
-    const month=monthKey();
-    const r=await jsonp({action:'admin_time_blocks',adminKey,month});
-    const box=$('timeBlocksList');
-    const items=r.items||[];
-    box.innerHTML=items.length?items.map(x=>`<div class="timeBlockItem">
-      <div class="timeBlockInfo"><b>${escapeHtml(x.date.replaceAll('-','/'))}　${escapeHtml(x.start)}–${escapeHtml(x.end)}</b>${x.reason?escapeHtml(x.reason):''}</div>
-      <button class="timeBlockCancel" onclick="cancelTimeBlockAdmin('${x.id}')">恢復</button>
-    </div>`).join(''):'<div class="empty" style="margin:10px 0">本月沒有另外關閉的時段</div>';
-  }catch(e){
-    toast('關閉時段讀取較慢');
-  }
+  await loadVacationMonth();
 }
 
 async function addTimeBlockAdmin(){
@@ -489,25 +508,17 @@ async function addTimeBlockAdmin(){
   if(!date){toast('請先選日期');return}
   if(!start || !end || end<=start){toast('請確認開始與結束時間');return}
   try{
-    await fetch(API_URL,{
-      method:'POST',mode:'no-cors',
-      headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},
-      body:new URLSearchParams({action:'admin_time_block_add',adminKey,date,start,end,reason})
-    });
+    await postForm({action:'admin_time_block_add',adminKey,date,start,end,reason});
     toast('已關閉這個時段');
-    setTimeout(loadTimeBlocksAdmin,250);
+    delete vacationMonthCache[monthKey()];setTimeout(loadVacationMonth,180);
   }catch(e){toast('設定失敗')}
 }
 
 async function cancelTimeBlockAdmin(blockId){
   try{
-    await fetch(API_URL,{
-      method:'POST',mode:'no-cors',
-      headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},
-      body:new URLSearchParams({action:'admin_time_block_cancel',adminKey,blockId})
-    });
+    await postForm({action:'admin_time_block_cancel',adminKey,blockId});
     toast('已恢復這個時段');
-    setTimeout(loadTimeBlocksAdmin,250);
+    delete vacationMonthCache[monthKey()];setTimeout(loadVacationMonth,180);
   }catch(e){toast('恢復失敗')}
 }
 
@@ -519,7 +530,7 @@ function showManagerPage(page){
   document.getElementById('navBookings').classList.toggle('active',page==='bookings');
   document.getElementById('navVacation').classList.toggle('active',page==='vacation');
   document.getElementById('navServices').classList.toggle('active',page==='services');
-  if(page==='vacation'){loadVacationMonth();loadTimeBlocksAdmin();}
+  if(page==='vacation') loadVacationMonth();
   if(page==='services') loadServiceSettingsAdmin();
 }
 
@@ -531,7 +542,6 @@ function shiftVacationMonth(delta){
   closedVacationDates=new Set(vacationMonthCache[month]||[]);
   renderVacationCalendar();
   loadVacationMonth();
-  loadTimeBlocksAdmin();
 }
 
 function monthKey(){
@@ -541,16 +551,28 @@ function monthKey(){
 async function loadVacationMonth(){
   const month=monthKey();
   const cached=vacationMonthCache[month];
-  closedVacationDates=new Set(cached||[]);
-  renderVacationCalendar();
-  try{
-    const r=await jsonp({action:'admin_closed_days',adminKey,month});
-    const dates=(r.items||[]).map(x=>x.date);
-    vacationMonthCache[month]=dates;
-    closedVacationDates=new Set(dates);
+
+  if(cached){
+    closedVacationDates=new Set(cached.closedDays||[]);
     renderVacationCalendar();
+    renderTimeBlocks(cached.timeBlocks||[]);
+  }else{
+    closedVacationDates=new Set();
+    renderVacationCalendar();
+  }
+
+  try{
+    const r=await jsonp({action:'admin_vacation_snapshot',adminKey,month});
+    if(!r.ok) throw new Error(r.message||'讀取失敗');
+
+    const closed=(r.closedDays||[]).map(x=>x.date);
+    const blocks=r.timeBlocks||[];
+    vacationMonthCache[month]={closedDays:closed,timeBlocks:blocks};
+    closedVacationDates=new Set(closed);
+    renderVacationCalendar();
+    renderTimeBlocks(blocks);
   }catch(e){
-    if(!cached) toast(e.message||'讀取休假日失敗');
+    if(!cached) toast('休假資料讀取較慢');
   }
 }
 
