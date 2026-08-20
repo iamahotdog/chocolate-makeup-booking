@@ -82,7 +82,7 @@ input[type="date"]::-webkit-date-and-time-value{
   width:min(100%,340px);
   max-height:calc(100dvh - 48px);
   overflow:auto;
-  padding:24px 20px 18px;
+  padding:22px 20px 18px;
   margin:0;
   border:1px solid var(--line);
   border-radius:24px;
@@ -200,6 +200,59 @@ body.modalOpen{
   border-top:1px solid rgba(45,106,66,.16);
 }
 
+
+.successWarm{
+  margin:22px 15px;
+  padding:22px 20px;
+  border:1px solid #ead7cc;
+  border-radius:23px;
+  background:#fff8f3;
+  color:var(--ink);
+  box-shadow:var(--shadow);
+}
+.successWarm h2{
+  margin:0 0 8px;
+  font-size:24px;
+}
+.successWarm .timeLine{
+  margin:0 0 18px;
+  color:var(--brown);
+  font-size:15px;
+  font-weight:800;
+}
+.nextSteps{
+  padding:16px;
+  border-radius:17px;
+  background:#fffdfb;
+  border:1px solid #ead7cc;
+}
+.nextSteps h3{
+  margin:0 0 10px;
+  font-size:16px;
+}
+.nextSteps ol{
+  margin:0;
+  padding-left:22px;
+}
+.nextSteps li{
+  margin:7px 0;
+  line-height:1.65;
+  font-size:13px;
+}
+.depositRule{
+  margin-top:15px;
+  padding:14px 15px;
+  border-radius:16px;
+  background:#f8eee8;
+  border:1px solid #e3c9ba;
+  color:#6f4d3f;
+  font-size:12.5px;
+  line-height:1.7;
+}
+.depositRule b{
+  color:var(--ink);
+}
+
 </style>
 </head>
 <body>
@@ -216,13 +269,6 @@ body.modalOpen{
 </section>
 
 <div id="lineState" class="lineState hidden" aria-live="polite"></div>
-
-<div class="oaCard" style="margin:0 16px 14px;">
-  <b>預約小提醒 ♡</b><br>
-  線上送出後僅為「預定時間」，<b>完成訂金支付後，才會正式為你保留時段。</b>
-  妝造風格與參考照片可以在預約後回 LINE 再慢慢聊。
-</div>
-
 
 <section id="services" class="services">
   <article class="service">
@@ -304,7 +350,7 @@ body.modalOpen{
     <div class="counter"><button type="button" onclick="step('sets',-1)">−</button><input id="sets" value="1" readonly><button type="button" onclick="step('sets',1)">＋</button></div>
   </div>
 
-  <div id="availability" class="notice">選好日期與時間後，巧克力幫你看看檔期 ♡</div>
+  <div id="availability" class="notice hidden"></div>
 
   <div class="field"><label>怎麼稱呼你？</label><input id="name" class="control" autocomplete="name" placeholder="姓名"></div>
   <div class="field"><label>聯絡手機</label><input id="phone" class="control" type="tel" inputmode="numeric" autocomplete="tel" maxlength="10" pattern="[0-9]{10}" placeholder="0912345678"></div>
@@ -371,8 +417,7 @@ body.modalOpen{
 
 <div id="brandModal" class="brandModal" role="dialog" aria-modal="true" aria-labelledby="brandModalTitle">
   <div class="brandModalCard">
-    <div class="brandModalMagic">🪄</div>
-    <h3 id="brandModalTitle" class="brandModalTitle"></h3>
+        <h3 id="brandModalTitle" class="brandModalTitle"></h3>
     <p id="brandModalText" class="brandModalText"></p>
     <div id="brandModalActions" class="brandModalActions"></div>
   </div>
@@ -381,7 +426,7 @@ body.modalOpen{
 <script>
 const LIFF_ID = '2011180525-A26EBkIG';
 const API_URL = 'https://script.google.com/macros/s/AKfycbxi5rwWSixQ7qAH39WSwfI6EQVkUgKRrAkVR7btnLeq_8LaOWFtmrhr0QM7FkNrDQHPSA/exec';
-let serviceId='',timer=null,lineReady=false,lineIdToken='',lineAccessToken='';
+let serviceId='',timer=null,lineReady=false,lineIdToken='',lineAccessToken='',suppressDateModal=false;
 const names={registration:'登記妝髮',wedding:'結婚專區',makeover:'妝髮換頭魔法'};
 const $=id=>document.getElementById(id);
 
@@ -397,7 +442,7 @@ function showBrandModal({
 }={}){
   $('brandModalTitle').textContent=title;
   $('brandModalText').textContent=text;
-  document.querySelector('.brandModalMagic').textContent=icon;
+  const modalMagic=document.querySelector('.brandModalMagic'); if(modalMagic) modalMagic.textContent=icon;
 
   const actions=$('brandModalActions');
   actions.innerHTML='';
@@ -499,7 +544,7 @@ async function connectLineForBooking(){
 function showAccessoryDetails(){
   showBrandModal({
     title:'飾品租借說明🥨',
-    text:'租借費用 $400 ＋ 押金 $200\n當日共收取 $600。\n\n飾品使用完畢後請寄回；確認無缺少、無損害後，會退回押金 $200 ♡',
+    text:'租借費用：$400。\n押金：$200。\n\n當日共收取 $600。\n\n飾品使用完畢後，請協助寄回。\n確認無缺少、無損害後，將退回押金 $200。',
     primaryText:'知道了'
   });
 }
@@ -587,13 +632,29 @@ function preventPastDate(){
 
   if(value && value <= today){
     $('date').value='';
-    showBrandModal({
-      title:'今天的魔法時段已經收單囉🪄',
-      text:'請幫我選明天之後的日期･.｡*',
-      primaryText:'重新選日期'
-    });
+    $('hour').value='';
+    $('minute').value='';
+
+    if(!suppressDateModal){
+      suppressDateModal=true;
+      showBrandModal({
+        title:'今天的魔法時段已經收單囉🪄',
+        text:'請幫我選明天之後的日期･.｡*',
+        primaryText:'重新選日期',
+        onPrimary:()=>{
+          // 重新開啟日期選擇時才解除，避免點時間欄又重複跳窗。
+          setTimeout(()=>{
+            suppressDateModal=false;
+            try{$('date').showPicker && $('date').showPicker();}catch(_){}
+            $('date').focus();
+          },80);
+        }
+      });
+    }
     return false;
   }
+
+  if(value > today) suppressDateModal=false;
   return true;
 }
 
@@ -692,7 +753,16 @@ function toggleArea(){
 }
 function selectedTime(){return $('hour').value&&$('minute').value?$('hour').value+':'+$('minute').value:''}
 function payload(){return{serviceId,date:$('date').value,time:selectedTime(),femaleCount:$('female').value,maleCount:$('male').value,setCount:$('sets').value}}
-function notice(cls,msg){$('availability').className='notice'+(cls?' '+cls:'');$('availability').textContent=msg}
+function notice(cls,msg){
+  const box=$('availability');
+  if(!msg){
+    box.className='notice hidden';
+    box.textContent='';
+    return;
+  }
+  box.className='notice'+(cls?' '+cls:'');
+  box.textContent=msg;
+}
 function scheduleCheck(){clearTimeout(timer);timer=setTimeout(checkAvailability,180)}
 
 function jsonp(params){
@@ -712,9 +782,9 @@ function jsonp(params){
 function checkAvailability(){
   const p=payload();
   if(!p.date||!p.time){notice('','選好日期與時間後，巧克力幫你看看檔期 ♡');return}
-  notice('','正在翻翻巧克力的行事曆…');
+  notice('','正在確認檔期…');
   jsonp({action:'check',...p}).then(r=>{
-    if(r&&r.available)notice('ok',`✓ 這個時間可以！預估服務到 ${r.serviceEnd}`);
+    if(r&&r.available)notice('ok',`預估完成變漂亮的時間：約 ${r.serviceEnd} ♡`);
     else notice('bad',r&&r.message?r.message:'這個時間目前無法預約。');
   }).catch(()=>notice('bad','檔期確認失敗，請再選一次時間。'));
 }
@@ -767,7 +837,7 @@ async function sendBookingSummaryToOfficialAccount(r,p){
           (p.area ? '（'+p.area+'）' : '')+'\n'+
           extra+
           (p.note ? '其他補充：'+p.note+'\n' : '')+
-          '\n※目前僅為預定時間，完成訂金支付後才正式保留時段。'
+          '\n※後續會先透過 LINE 討論妝造細節；完成訂金支付後，才會正式保留時段。'
       }
     ]);
 
@@ -779,8 +849,8 @@ async function sendBookingSummaryToOfficialAccount(r,p){
 }
 
 async function pollStatus(requestId){
-  for(let i=0;i<12;i++){
-    await new Promise(r=>setTimeout(r,700));
+  for(let i=0;i<18;i++){
+    await new Promise(r=>setTimeout(r,350));
     const s=await jsonp({action:'status',requestId});
     if(s&&s.status==='success')return s;
     if(s&&s.status==='error')throw new Error(s.message||'預約失敗');
@@ -830,8 +900,8 @@ async function submitBooking(){
 
   const b=$('submit');
   b.disabled=true;
-  b.textContent='正在幫你預定…';
-  notice('','正在確認最後檔期…');
+  b.textContent='正在送出預約…';
+  notice('','正在送出資料…');
 
   try{
     await fetch(API_URL,{
@@ -844,14 +914,23 @@ async function submitBooking(){
     const r=await pollStatus(p.requestId);
     const sentToChat=lineReady ? await sendBookingSummaryToOfficialAccount(r,p) : false;
     $('formPage').style.display='none';
-    $('result').innerHTML=`<section class="successSimple">
-      <h2>預約成功 ✓</h2>
-      <p><b>時間先幫您登記好囉！！</b><br>${displayDateTime(r.date,r.time)}</p>
-      <div class="photoReq">
-        <p><b>接下來再麻煩您傳給巧克力：</b><br>
-        ① 1 張面光素顏照<br>
-        ② 2 張能清楚看見五官的生活照</p>
-        <p>妝感、髮型或其他參考照片，也可以直接回到 LINE 一起傳給我 ♡</p>
+    $('result').innerHTML=`<section class="successWarm">
+      <h2>預約資料已送出 ✓</h2>
+      <p class="timeLine">時間先幫您登記好囉！！<br>${displayDateTime(r.date,r.time)}</p>
+
+      <div class="nextSteps">
+        <h3>接下來再麻煩您傳給巧克力 ♡</h3>
+        <ol>
+          <li>1 張面光、清楚的素顏照。</li>
+          <li>2 張能清楚看見五官的生活照。</li>
+          <li>喜歡的妝感、髮型或參考照片；風格細節會再透過 LINE 一起討論確認。</li>
+        </ol>
+      </div>
+
+      <div class="depositRule">
+        <b>檔期保留方式</b><br>
+        若同一時段有不同人詢問，將以 <b>先完成訂金支付者</b> 為優先預約成功的對象。<br><br>
+        <b>記得要完成訂金支付，才會是真正的預約成功喔！！！</b>
       </div>
     </section>`;
     window.scrollTo({top:0,behavior:'smooth'});
