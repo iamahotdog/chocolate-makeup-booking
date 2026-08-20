@@ -141,11 +141,11 @@ input[type="date"]::-webkit-date-and-time-value{
   <p>先把時間預定起來；完成訂金支付後，才會正式保留時段。</p>
 </header>
 <div class="formBody">
-  <div class="field"><label>想預約哪一天？</label><input id="date" class="control" type="date" aria-label="預約日期"><div class="helper">只能選今天之後的日期；若選今天，已經過去的時間會自動排除。</div></div>
+  <div class="field"><label>想預約哪一天？</label><input id="date" class="control" type="date" aria-label="預約日期"></div>
   <div class="field">
     <label>希望幾點開始？</label>
     <div class="timeGrid"><select id="hour" class="control"></select><div class="colon">:</div><select id="minute" class="control"></select></div>
-    <div class="helper">每5分鐘都可以選。</div>
+    
   </div>
 
   <div id="peopleFields" class="field">
@@ -183,21 +183,46 @@ input[type="date"]::-webkit-date-and-time-value{
 <script>
 const LIFF_ID = '2011180525-A26EBkIG';
 const API_URL = 'https://script.google.com/macros/s/AKfycbxi5rwWSixQ7qAH39WSwfI6EQVkUgKRrAkVR7btnLeq_8LaOWFtmrhr0QM7FkNrDQHPSA/exec';
-let serviceId='',timer=null,lineReady=false,lineIdToken='';
+let serviceId='',timer=null,lineReady=false,lineIdToken='',lineAccessToken='';
 const names={registration:'登記妝髮',wedding:'結婚專區',makeover:'妝髮換頭魔法'};
 const $=id=>document.getElementById(id);
 
 async function initLiff(){
-  if(!LIFF_ID){$('lineState').className='lineState bad';$('lineState').textContent='目前還沒完成 LINE 預約設定。';return}
   try{
     await liff.init({liffId:LIFF_ID});
-    if(!liff.isLoggedIn()){liff.login({redirectUri:location.href});return}
-    lineIdToken=liff.getIDToken()||'';
-    const d=liff.getDecodedIDToken();
-    lineReady=!!lineIdToken;
-    $('lineState').className='lineState '+(lineReady?'ok':'bad');
-    $('lineState').textContent=lineReady?'✓ LINE 已連接'+(d&&d.name?'｜'+d.name:''):'LINE 登入資訊不完整，請重新開啟。';
-  }catch(e){console.error(e);$('lineState').className='lineState bad';$('lineState').textContent='LINE 連線失敗，請重新從官方帳號開啟。'}
+
+    if(!liff.isLoggedIn()){
+      liff.login({redirectUri:location.href});
+      return;
+    }
+
+    lineIdToken = liff.getIDToken() || '';
+    lineAccessToken = liff.getAccessToken() || '';
+
+    let name = '';
+    try{
+      const d = liff.getDecodedIDToken();
+      if(d && d.name) name = d.name;
+    }catch(_){}
+
+    // 有 ID token 或 LIFF access token 任何一種，就視為可驗證 LINE 身分。
+    lineReady = !!(lineIdToken || lineAccessToken);
+
+    if(lineReady){
+      $('lineState').className='lineState ok';
+      $('lineState').textContent='✓ LINE 已連接' + (name ? '｜'+name : '');
+    }else{
+      // 不再擋住預約流程；仍可建立預約，只是無法自動回傳至聊天。
+      $('lineState').className='lineState';
+      $('lineState').textContent='LINE 身分暫時沒有讀取到，仍可先完成預約。';
+    }
+  }catch(e){
+    console.error(e);
+    // 不阻擋使用者預約。
+    $('lineState').className='lineState';
+    $('lineState').textContent='LINE 連線暫時不穩定，仍可先完成預約。';
+    lineReady=false;
+  }
 }
 
 function initForm(){
@@ -219,7 +244,14 @@ function initForm(){
     String(now.getMonth()+1).padStart(2,'0')+'-'+
     String(now.getDate()).padStart(2,'0');
 
-  $('date').min=localToday;
+  const tomorrow=new Date(now);
+  tomorrow.setDate(tomorrow.getDate()+1);
+  const localTomorrow=
+    tomorrow.getFullYear()+'-'+
+    String(tomorrow.getMonth()+1).padStart(2,'0')+'-'+
+    String(tomorrow.getDate()).padStart(2,'0');
+
+  $('date').min=localTomorrow;
 
   $('date').addEventListener('change',()=>{
     preventPastDate();
@@ -249,9 +281,9 @@ function preventPastDate(){
   const value=$('date').value;
   const today=localDateString();
 
-  if(value && value < today){
+  if(value && value <= today){
     $('date').value='';
-    notice('bad','不能預約過去的日期喔，請重新選一天 ♡');
+    alert('今天的魔法時段已經收單囉＞＜\n請幫我選明天之後的日期 ♡');
     return false;
   }
   return true;
@@ -319,7 +351,7 @@ function validateNotPast(){
   const now=new Date();
 
   if(selected.getTime() <= now.getTime()){
-    notice('bad','這個時間已經過囉，請選現在之後的時間 ♡');
+    alert('這個時間已經跑掉了＞＜\n請幫我選現在之後的時間 ♡');
     return false;
   }
 
@@ -424,7 +456,8 @@ async function submitBooking(){
     locationType:$('location').value,
     area:$('area').value.trim(),
     note:$('note').value.trim(),
-    idToken:lineIdToken
+    idToken:lineIdToken,
+    accessToken:lineAccessToken
   });
 
   if(!p.name||!p.phone||!p.locationType){notice('bad','還差姓名、手機或開妝地點沒有填完喔。');return}
@@ -444,7 +477,7 @@ async function submitBooking(){
     });
 
     const r=await pollStatus(p.requestId);
-    const sentToChat=await sendBookingSummaryToOfficialAccount(r,p);
+    const sentToChat=lineReady ? await sendBookingSummaryToOfficialAccount(r,p) : false;
     $('formPage').style.display='none';
     $('result').innerHTML=`<section class="success">
       <h2>時間先幫你登記好囉 ✓</h2>
