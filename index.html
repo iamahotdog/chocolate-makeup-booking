@@ -432,7 +432,7 @@ body.modalOpen{
   <div class="field"><label class="requiredLabel">想預約哪一天？</label><input id="date" class="control" type="date" aria-label="預約日期" required></div>
   <div class="field">
     <label class="requiredLabel">希望幾點開始？</label>
-    <div class="timeGrid"><select id="hour" class="control" required></select><div class="colon">:</div><select id="minute" class="control" required></select></div><div class="fieldHint">平日開妝時間為 10:00 前或 14:00 後；假日全時段開放。</div>
+    <div class="timeGrid"><select id="hour" class="control" required></select><div class="colon">:</div><select id="minute" class="control" required></select></div><div class="fieldHint">平日開妝時間可選至 10:00，14:00 後重新開放；假日全時段開放。</div>
     
   </div>
 
@@ -943,7 +943,7 @@ function isAllowedStartTime(time,dateValue){
   if(day===0 || day===6) return true;
   const [h,m]=time.split(':').map(Number);
   const mins=h*60+m;
-  return mins < 600 || mins >= 840;
+  return mins <= 600 || mins >= 840;
 }
 
 function refreshAllowedTimeOptions(){

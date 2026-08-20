@@ -29,21 +29,69 @@ body{padding-bottom:max(28px,env(safe-area-inset-bottom))}
 .vacationBox{padding:4px 12px 7px}.vacationToggle{width:100%;border:1px solid var(--line);border-radius:14px;padding:11px;background:#fff;color:var(--brown);font-weight:850}.vacationPanel{display:none;margin-top:9px;padding:12px;border:1px solid var(--line);border-radius:17px;background:#fff}.vacationPanel.show{display:block}.vacationRow{display:grid;grid-template-columns:1fr 100px;gap:8px}.closedDaysList{margin-top:9px}.closedDay{display:flex;align-items:center;justify-content:space-between;padding:9px 4px;border-top:1px solid #f1e5de;font-size:12px}.closedDay button{border:0;background:#f8e7e2;color:#94493c;border-radius:10px;padding:7px 9px;font-weight:800}
 
 .managerNav{
-  display:flex;
-  align-items:center;
-  gap:6px;
-  padding:14px 16px 4px;
-  font-size:12px;
+  position:sticky;
+  top:72px;
+  z-index:18;
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:9px;
+  padding:11px 12px;
+  background:rgba(255,248,243,.96);
+  backdrop-filter:blur(12px);
+  border-bottom:1px solid rgba(234,215,204,.7);
 }
 .managerNavBtn{
-  border:0;
-  background:none;
-  padding:6px 2px;
+  min-width:0;
+  border:1px solid var(--line);
+  border-radius:17px;
+  padding:11px 12px;
+  background:#fff;
   color:var(--muted);
-  font-weight:800;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:9px;
+  text-align:left;
+  box-shadow:0 4px 12px rgba(74,44,31,.04);
 }
-.managerNavBtn.active{color:var(--brown)}
-.crumbSep{color:#c7a99a}
+.managerNavBtn .navIcon{
+  flex:0 0 30px;
+  width:30px;
+  height:30px;
+  border-radius:10px;
+  display:grid;
+  place-items:center;
+  background:var(--soft);
+  color:var(--brown);
+  font-size:17px;
+}
+.managerNavBtn b{
+  display:block;
+  color:inherit;
+  font-size:13px;
+  line-height:1.15;
+}
+.managerNavBtn small{
+  display:block;
+  margin-top:3px;
+  font-size:9.5px;
+  font-weight:650;
+  opacity:.8;
+}
+.managerNavBtn.active{
+  background:var(--brown);
+  border-color:var(--brown);
+  color:#fff;
+  box-shadow:0 4px 0 var(--brown2);
+}
+.managerNavBtn.active .navIcon{
+  background:rgba(255,255,255,.16);
+  color:#fff;
+}
+.managerNavBtn:active{
+  transform:translateY(2px);
+}
+
 .managerPage.hidden{display:none}
 .pageIntro{padding:10px 16px 4px}
 .pageIntro h1{margin:0;font-size:22px}
@@ -109,16 +157,21 @@ body{padding-bottom:max(28px,env(safe-area-inset-bottom))}
 
 
 <section id="dashboard" class="dashboard">
-  <nav class="managerNav" aria-label="管理頁面">
-    <button id="navBookings" class="managerNavBtn active" onclick="showManagerPage('bookings')">首頁</button>
-    <span class="crumbSep">›</span>
-    <button id="navVacation" class="managerNavBtn" onclick="showManagerPage('vacation')">休假</button>
+  <nav class="managerNav" aria-label="管理功能切換">
+    <button id="navBookings" class="managerNavBtn active" onclick="showManagerPage('bookings')">
+      <span class="navIcon">♡</span>
+      <span><b>預約管理</b><small>訂金・時段</small></span>
+    </button>
+    <button id="navVacation" class="managerNavBtn" onclick="showManagerPage('vacation')">
+      <span class="navIcon">☾</span>
+      <span><b>休假設定</b><small>整日不開放</small></span>
+    </button>
   </nav>
 
   <section id="bookingsPage" class="managerPage">
     <div class="pageIntro">
       <h1>預約管理</h1>
-      <p>確認訂金、取消或釋放時段都在這裡處理。</p>
+      <p>查看目前預約，確認訂金或釋放時段。</p>
     </div>
 
     <div class="tabs">
@@ -134,7 +187,7 @@ body{padding-bottom:max(28px,env(safe-area-inset-bottom))}
   <section id="vacationPage" class="managerPage hidden">
     <div class="pageIntro">
       <h1>休假日設定</h1>
-      <p>一次選好多天，最後再統一設定，不用一筆一筆按。</p>
+      <p>直接在月曆多選日期，再一次設定休假或恢復開放。</p>
     </div>
 
     <div class="vacationCard">
