@@ -447,7 +447,7 @@ body.modalOpen{
   <div class="field"><label class="requiredLabel">怎麼稱呼你？</label><input id="name" class="control" autocomplete="name" placeholder="姓名" required></div>
   <div class="field"><label class="requiredLabel">聯絡手機</label><input id="phone" class="control" type="tel" inputmode="numeric" autocomplete="tel" maxlength="10" pattern="[0-9]{10}" placeholder="0912345678" required><div class="fieldHint">除非 LINE 聯繫不到您，否則不會使用電話聯繫 ♡</div></div>
   <div class="field"><label class="requiredLabel">在哪裡開妝？</label><select id="location" class="control" onchange="toggleArea()" required></select></div>
-  <div id="areaField" class="field hidden"><label class="requiredLabel">到府的大概地區</label><input id="area" class="control" placeholder="例如：中壢區" required><div class="helper">詳細地址之後在 LINE 再確認即可。</div></div>
+  <div id="areaField" class="field hidden"><label class="requiredLabel">開妝詳細地點</label><input id="area" class="control" placeholder="例：臺北市信義區○○路／臺北車站附近飯店" required><div class="helper">請填寫詳細地址或附近地標，以便確認交通距離與報價 ♡</div></div>
   
   
   <div id="registrationExtra" class="hidden">
@@ -891,8 +891,8 @@ function openForm(id){
   $('peopleFields').classList.toggle('hidden',id==='wedding');$('setField').classList.toggle('hidden',id!=='wedding');
   $('female').value=1;$('male').value=0;$('sets').value=1;
   $('location').innerHTML=id==='makeover'
-    ? '<option value="">請選擇</option><option>忠孝復興工作室</option><option>鶯歌工作室</option><option>到府服務</option>'
-    : '<option value="">請選擇</option><option>忠孝復興工作室</option><option>到府服務</option>';
+    ? '<option value="">請選擇</option><option>忠孝復興工作室</option><option>鶯歌工作室</option><option>到府服務／自選地點</option>'
+    : '<option value="">請選擇</option><option>忠孝復興工作室</option><option>到府服務／自選地點</option>';
   $('registrationExtra').classList.toggle('hidden',id!=='registration');
   $('makeoverExtra').classList.toggle('hidden',id!=='makeover');
   $('weddingExtra').classList.toggle('hidden',id!=='wedding');
@@ -905,7 +905,7 @@ function syncConditionalRequired(){
   const isRegistration=serviceId==='registration';
   const isMakeover=serviceId==='makeover';
   const isWedding=serviceId==='wedding';
-  const isHome=$('location') && $('location').value==='到府服務';
+  const isHome=$('location') && $('location').value==='到府服務／自選地點';
 
   ['registrationStyle','registrationPhoto','followMakeup','registrationAccessoryRental'].forEach(id=>{
     if($(id)) $(id).required=isRegistration;
@@ -925,7 +925,7 @@ function syncConditionalRequired(){
 
 function toggleArea(){
   syncConditionalRequired();
-  const isHome=$('location').value==='到府服務';
+  const isHome=$('location').value==='到府服務／自選地點';
   $('areaField').classList.toggle('hidden',!isHome);
   if($('elevatorField')){
     $('elevatorField').classList.toggle('hidden',!(serviceId==='wedding' && isHome));
@@ -1020,7 +1020,8 @@ async function sendBookingSummaryToOfficialAccount(r,p){
           '姓名：'+p.name+'\n'+
           '手機：'+p.phone+'\n'+
           '開妝地點：'+p.locationType+
-          (p.area ? '（'+p.area+'）' : '')+'\n'+
+          (p.area ? '\n詳細地點：'+p.area : '')+
+          (p.locationType==='到府服務／自選地點' ? '\n※將依實際地點確認交通與到府費用' : '')+'\n'+
           extra+
           (p.note ? '其他補充：'+p.note+'\n' : '')+
           '\n※後續會先透過 LINE 討論妝造細節；完成訂金支付後，才會正式保留時段。'
@@ -1054,8 +1055,8 @@ function validateRequiredFields(){
   if(!$('phone').value.trim()) missing.push('聯絡手機');
   if(!$('location').value) missing.push('開妝地點');
 
-  if($('location').value==='到府服務' && !$('area').value.trim()){
-    missing.push('到府的大概地區');
+  if($('location').value==='到府服務／自選地點' && !$('area').value.trim()){
+    missing.push('開妝詳細地點');
   }
 
   if(serviceId==='registration'){
@@ -1074,7 +1075,7 @@ function validateRequiredFields(){
   if(serviceId==='wedding'){
     if(!$('weddingStyle').value.trim()) missing.push('妝造風格');
     if(!$('weddingShootLocation').value.trim()) missing.push('婚紗拍攝地點');
-    if($('location').value==='到府服務' && !$('hasElevator').value){
+    if($('location').value==='到府服務／自選地點' && !$('hasElevator').value){
       missing.push('是否有電梯');
     }
   }
@@ -1124,7 +1125,7 @@ async function submitBooking(){
     makeupStyle:serviceId==='makeover' ? $('makeupStyle').value.trim() : '',
     makeupPurpose:serviceId==='makeover' ? $('makeupPurpose').value.trim() : '',
     accessoryRental:serviceId==='makeover' ? $('accessoryRental').value : '',
-    hasElevator:(serviceId==='wedding' && $('location').value==='到府服務') ? $('hasElevator').value : '',
+    hasElevator:(serviceId==='wedding' && $('location').value==='到府服務／自選地點') ? $('hasElevator').value : '',
     weddingStyle:serviceId==='wedding' ? $('weddingStyle').value.trim() : '',
     weddingShootLocation:serviceId==='wedding' ? $('weddingShootLocation').value.trim() : '',
     idToken:lineIdToken,
@@ -1133,8 +1134,8 @@ async function submitBooking(){
 
   if(!p.name||!p.phone||!p.locationType){notice('bad','還差姓名、手機或開妝地點沒有填完喔。');return}
   if(!/^09\d{8}$/.test(p.phone)){notice('bad','手機號碼請輸入 10 碼，例如 0912345678 ♡');return}
-  if(p.locationType==='到府服務'&&!p.area){notice('bad','到府服務先告訴巧克力大概在哪一區就好。');return}
-  if(serviceId==='wedding' && p.locationType==='到府服務' && !p.hasElevator){notice('bad','到府服務再幫我選一下現場有沒有電梯 ♡');return}
+  if(p.locationType==='到府服務／自選地點'&&!p.area){notice('bad','請填寫開妝詳細地址或附近地標，以便確認交通距離與報價 ♡');return}
+  if(serviceId==='wedding' && p.locationType==='到府服務／自選地點' && !p.hasElevator){notice('bad','到府服務再幫我選一下現場有沒有電梯 ♡');return}
 
   const b=$('submit');
   b.disabled=true;
