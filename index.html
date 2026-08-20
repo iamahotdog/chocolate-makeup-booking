@@ -1294,19 +1294,16 @@ async function submitBooking(){
     // 後端確認成功後，先切換成功畫面，再處理任何 LINE 對話。
     finalizeBookingSuccess(r,p);
 
-    // LINE 摘要只做背景補送，不再影響畫面。
+    // LINE 摘要只做背景補送，不影響預約成功。
     if(lineReady && window.liff && liff.isInClient()){
       Promise.resolve()
         .then(()=>sendBookingSummaryToOfficialAccount(r,p))
-        .catch(err=>console.warn('LINE summary failed',err));
+        .then(sent=>console.log('LINE booking summary sent:',sent))
+        .catch(err=>console.warn('LINE booking summary failed:',err));
+    }else{
+      console.warn('LINE booking summary skipped: not in LINE client or LINE identity unavailable');
     }
 
-    // MINI App 內才背景補送摘要；失敗不影響成功畫面。
-    if(lineReady && window.liff && liff.isInClient()){
-      Promise.resolve()
-        .then(()=>sendBookingSummaryToOfficialAccount(r,p))
-        .catch(err=>console.warn('LINE summary failed',err));
-    }
   }catch(e){
     notice('bad',e.message||'預約送出失敗，請再試一次。');
   }finally{
