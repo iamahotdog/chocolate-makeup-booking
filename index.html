@@ -337,18 +337,6 @@ body.modalOpen{
 }
 
 
-.publicBookingNote{
-  margin:0 16px 13px;
-  padding:11px 13px;
-  border:1px solid #ead7cc;
-  border-radius:14px;
-  background:#fffaf6;
-  color:#8a6b5f;
-  font-size:11.5px;
-  line-height:1.65;
-}
-.publicBookingNote b{color:#6a4230}
-
 </style>
 </head>
 <body>
@@ -365,12 +353,6 @@ body.modalOpen{
 </section>
 
 <div id="lineState" class="lineState hidden" aria-live="polite"></div>
-
-
-<div class="publicBookingNote">
-  <b>公開預約 ♡</b>
-  不需要 LINE 登入也可以直接填寫；送出後再回 LINE 與巧克力討論妝造細節即可。
-</div>
 <section id="services" class="services">
   <article class="service">
     <div class="icon">🥨</div>
@@ -681,17 +663,19 @@ async function initLiff(){
   try{
     await liff.init({liffId:LIFF_ID});
 
-    if(liff.isLoggedIn()){
-      await refreshLineIdentity();
-    }else{
-      lineReady=false;
+    if(!liff.isLoggedIn()){
+      // Published MINI App：從 OA 打開時應直接進 LINE 登入流程。
+      liff.login({redirectUri:location.href});
+      return;
     }
 
-    // 首頁完全不顯示 LINE 技術狀態。
+    await refreshLineIdentity();
+
+    // 首頁不顯示任何 LINE 技術狀態。
     $('lineState').className='lineState hidden';
     $('lineState').textContent='';
   }catch(e){
-    console.error(e);
+    console.error('LIFF init failed',e);
     lineReady=false;
     $('lineState').className='lineState hidden';
     $('lineState').textContent='';
@@ -951,28 +935,45 @@ function refreshAllowedTimeOptions(){
   const minuteEl=$('minute');
   if(!hourEl || !minuteEl) return;
 
-  // 先依小時判斷是否存在至少一個可選分鐘。
   Array.from(hourEl.options).forEach(opt=>{
     if(!opt.value) return;
     const h=Number(opt.value);
     const hasAllowed=[0,5,10,15,20,25,30,35,40,45,50,55]
-      .some(m=>isAllowedStartTime(String(h).padStart(2,'0')+':'+String(m).padStart(2,'0'),$('date').value));
+      .some(m=>isAllowedStartTime(
+        String(h).padStart(2,'0')+':'+String(m).padStart(2,'0'),
+        $('date').value
+      ));
     opt.disabled=!hasAllowed;
   });
 
-  // 依目前選中的小時控制分鐘。
   const h=hourEl.value;
+
+  // 還沒選小時時，分鐘仍維持可選，並預設 00。
+  if(!h){
+    Array.from(minuteEl.options).forEach(opt=>{
+      if(opt.value) opt.disabled=false;
+    });
+    minuteEl.value='00';
+    return;
+  }
+
+  // 選小時後，再依平日／假日規則控制分鐘。
   Array.from(minuteEl.options).forEach(opt=>{
     if(!opt.value) return;
-    opt.disabled = !h || !isAllowedStartTime(h+':'+opt.value,$('date').value);
+    opt.disabled=!isAllowedStartTime(h+':'+opt.value,$('date').value);
   });
 
-  if(hourEl.value && hourEl.selectedOptions[0] && hourEl.selectedOptions[0].disabled){
+  if(hourEl.selectedOptions[0] && hourEl.selectedOptions[0].disabled){
     hourEl.value='';
-    minuteEl.value='';
+    minuteEl.value='00';
+    return;
   }
-  if(minuteEl.value && minuteEl.selectedOptions[0] && minuteEl.selectedOptions[0].disabled){
-    minuteEl.value='';
+
+  // 例如平日選 10 點，只允許 10:00；
+  // 若原分鐘值被停用，自動回到 00。
+  if(!minuteEl.value ||
+     (minuteEl.selectedOptions[0] && minuteEl.selectedOptions[0].disabled)){
+    minuteEl.value='00';
   }
 }
 
@@ -1143,6 +1144,26 @@ function validateRequiredFields(){
 
 async function submitBooking(){
   if(!validateRequiredFields()) return;
+
+  // 正式 Published LIFF：送出前重新確認 LINE 身分。
+  if(!lineReady){
+    const refreshed=await refreshLineIdentity();
+
+    if(!refreshed){
+      if(window.liff && !liff.isLoggedIn()){
+        liff.login({redirectUri:location.href});
+        return;
+      }
+
+      showBrandModal({
+        title:'送出前先連一下 LINE ♡',
+        text:'請從巧克力的 LINE 官方帳號重新開啟預約頁，再送出預約。',
+        primaryText:'知道了'
+      });
+      return;
+    }
+  }
+
   const p=payload();
   Object.assign(p,{
     action:'book',
@@ -1161,7 +1182,10 @@ async function submitBooking(){
     accessoryRental:serviceId==='makeover' ? $('accessoryRental').value : '',
     hasElevator:(serviceId==='wedding' && $('location').value==='到府服務／自選地點') ? $('hasElevator').value : '',
     weddingStyle:serviceId==='wedding' ? $('weddingStyle').value.trim() : '',
-    weddingShootLocation:serviceId==='wedding' ? $('weddingShootLocation').value.trim() : ''});
+    weddingShootLocation:serviceId==='wedding' ? $('weddingShootLocation').value.trim() : '',
+    idToken:lineIdToken,
+    accessToken:lineAccessToken
+  });
 
   if(!p.name||!p.phone||!p.locationType){notice('bad','還差姓名、手機或開妝地點沒有填完喔。');return}
   if(!/^09\d{8}$/.test(p.phone)){notice('bad','手機號碼請輸入 10 碼，例如 0912345678 ♡');return}
@@ -1222,9 +1246,7 @@ async function submitBooking(){
 }
 
 initForm();
-if(window.liff){
-  initLiff().catch(()=>{});
-}
+initLiff();
 </script>
 </body>
 </html>
