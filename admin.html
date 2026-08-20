@@ -110,6 +110,8 @@ body{padding-bottom:max(28px,env(safe-area-inset-bottom))}
 .weekHead,.calendarGrid{display:grid;grid-template-columns:repeat(7,1fr);gap:7px}
 .weekHead{margin:16px 0 8px;color:var(--muted);font-size:10px;text-align:center}
 .dayBtn{
+  touch-action:manipulation;
+  -webkit-tap-highlight-color:transparent;
   aspect-ratio:1/1;
   border:1px solid #eee0d7;
   border-radius:13px;
@@ -387,6 +389,7 @@ let vacationCursor=new Date();
 vacationCursor.setDate(1);
 let selectedVacationDates=new Set();
 let closedVacationDates=new Set();
+let vacationMonthCache={};
 
 function showManagerPage(page){
   managerPage=page;
@@ -401,6 +404,9 @@ function shiftVacationMonth(delta){
   vacationCursor.setMonth(vacationCursor.getMonth()+delta);
   vacationCursor.setDate(1);
   selectedVacationDates.clear();
+  const month=monthKey();
+  closedVacationDates=new Set(vacationMonthCache[month]||[]);
+  renderVacationCalendar();
   loadVacationMonth();
 }
 
@@ -409,13 +415,18 @@ function monthKey(){
 }
 
 async function loadVacationMonth(){
+  const month=monthKey();
+  const cached=vacationMonthCache[month];
+  closedVacationDates=new Set(cached||[]);
+  renderVacationCalendar();
   try{
-    const month=monthKey();
     const r=await jsonp({action:'admin_closed_days',adminKey,month});
-    closedVacationDates=new Set((r.items||[]).map(x=>x.date));
+    const dates=(r.items||[]).map(x=>x.date);
+    vacationMonthCache[month]=dates;
+    closedVacationDates=new Set(dates);
     renderVacationCalendar();
   }catch(e){
-    toast(e.message||'讀取休假日失敗');
+    if(!cached) toast(e.message||'讀取休假日失敗');
   }
 }
 
@@ -471,8 +482,13 @@ async function applyVacationBulk(mode){
         mode
       })
     });
+    const month=monthKey();
+    const current=new Set(vacationMonthCache[month]||[]);
+    dates.forEach(d=>mode==='close'?current.add(d):current.delete(d));
+    vacationMonthCache[month]=[...current];
+    closedVacationDates=new Set(current);
     selectedVacationDates.clear();
-    setTimeout(loadVacationMonth,450);
+    renderVacationCalendar();
     toast(mode==='close'?'已設定休假日':'已恢復開放');
   }catch(e){
     toast(e.message||'更新失敗');

@@ -337,6 +337,7 @@ body.modalOpen{
 }
 
 
+.successConfirmed{display:inline-block;margin:2px 0 8px;padding:6px 11px;border-radius:999px;background:#f4e3da;color:#754634;font-size:11px;font-weight:800}
 </style>
 </head>
 <body>
@@ -1206,15 +1207,14 @@ async function submitBooking(){
     });
 
     const r=await pollStatus(p.requestId);
-    let sentToChat=false;
-    if(lineReady && window.liff && liff.isInClient()){
-      try{ sentToChat=await sendBookingSummaryToOfficialAccount(r,p); }catch(_){}
-    }
+
+    // 預約建立成功就立即顯示完成畫面，不等待 LINE 訊息。
     $('formPage').style.display='none';
     $('result').innerHTML=`<section class="successWarm">
       <div class="successHero">
         <h2>期待巧克力施魔法的日子 ♡</h2>
-        <p>時間先幫您預約好囉<br>${displayDateTime(r.date,r.time)}</p>
+        <p class="successConfirmed">預約資料已送出</p>
+        <p>時間先幫您登記好囉<br>${displayDateTime(r.date,r.time)}</p>
       </div>
 
       <div class="successSection">
@@ -1237,6 +1237,13 @@ async function submitBooking(){
       </div>
     </section>`;
     window.scrollTo({top:0,behavior:'smooth'});
+
+    // MINI App 內才背景補送摘要；失敗不影響成功畫面。
+    if(lineReady && window.liff && liff.isInClient()){
+      Promise.resolve()
+        .then(()=>sendBookingSummaryToOfficialAccount(r,p))
+        .catch(err=>console.warn('LINE summary failed',err));
+    }
   }catch(e){
     notice('bad',e.message||'預約送出失敗，請再試一次。');
   }finally{
