@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Chocolate Makeup Studio｜預約</title>
+<script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<style>
+:root{
+ --cream:#fffaf5;--paper:#fffdfb;--ink:#4b2d20;--brown:#70432f;--muted:#9a7c6d;
+ --line:#ead7cc;--rose:#f8ede6;--green:#edf7f0;--greenInk:#2d6a42;
+ --red:#fff0ed;--redInk:#a44338;--shadow:0 14px 34px rgba(75,44,30,.08)
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;min-height:100%;background:var(--cream);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"PingFang TC","Noto Sans TC",sans-serif}
+button,input,select,textarea{font:inherit}
+.app{width:100%;min-height:100vh;padding-bottom:44px;background:radial-gradient(circle at 50% 0,#fff5ec 0,#fffaf5 38%,#fffaf5 100%)}
+.brand{text-align:center;padding:22px 18px 5px}.brandName{font:italic 34px Georgia,serif}.brandSub{margin-top:6px;font-size:9px;letter-spacing:4px}
+.magic{display:flex;align-items:center;justify-content:center;gap:10px;margin:16px auto 4px;color:#bc8d73}.magic:before,.magic:after{content:"";width:40px;height:1px;background:#e5cdbf}
+.hero{text-align:center;padding:2px 22px 18px}.hero h1{margin:0;font-size:31px;line-height:1.35;letter-spacing:.2px}.hero p{margin:8px 0 0;color:var(--muted);font-size:13px}
+.lineState{max-width:360px;margin:0 auto 13px;padding:8px 12px;text-align:center;border-radius:999px;background:#f7eee8;color:#76584a;font-size:11px}
+.lineState.ok{background:var(--green);color:var(--greenInk)}.lineState.bad{background:var(--red);color:var(--redInk)}
+.services{padding:0 16px}
+.service{display:flex;align-items:center;gap:13px;padding:15px;margin:10px 0;border:1px solid var(--line);border-radius:21px;background:rgba(255,253,251,.96);box-shadow:var(--shadow)}
+.icon{flex:0 0 46px;width:46px;height:46px;border-radius:15px;display:grid;place-items:center;background:var(--rose);font-size:25px}
+.serviceText{min-width:0;flex:1}.service h2{margin:0 0 4px;font-size:18px}.service p{margin:0;color:var(--muted);font-size:11.5px;line-height:1.5}.meta{display:block;margin-top:5px;color:#96664d;font-size:10.5px;font-weight:700}
+.bookBtn{flex:0 0 auto;border:0;border-radius:999px;padding:9px 13px;background:linear-gradient(#79503b,#613928);color:#fff;font-size:11px;font-weight:800;box-shadow:0 3px 0 #46291e;transition:.08s}
+.bookBtn:active{transform:translateY(3px);box-shadow:0 0 0 #46291e}
+.formPage{display:none;padding:0 14px}.formCard{overflow:hidden;border:1px solid var(--line);border-radius:23px;background:var(--paper);box-shadow:var(--shadow)}
+.formHead{padding:17px 17px 14px;border-bottom:1px solid #efe2da;background:linear-gradient(#fffdfb,#fff9f5)}.back{border:0;background:none;padding:3px 0;color:var(--brown);font-size:13px;font-weight:800}
+.formHead h2{margin:11px 0 4px;font-size:23px}.formHead p{margin:0;color:var(--muted);font-size:11.5px;line-height:1.55}
+.formBody{padding:17px}.field{margin-bottom:16px}.field label{display:block;margin-bottom:7px;font-size:13px;font-weight:800}
+.control{width:100%;padding:13px 14px;border:1px solid #dfc8bb;border-radius:14px;background:#fff;color:var(--ink);outline:0}.control:focus{border-color:#b98364;box-shadow:0 0 0 4px rgba(185,131,100,.12)}
+.timeGrid{display:grid;grid-template-columns:1fr 22px 1fr;gap:7px;align-items:center}.colon{text-align:center;color:#bc8d73;font-weight:900}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}.counterLabel{font-size:10.5px;color:var(--muted);margin-bottom:5px}
+.counter{display:grid;grid-template-columns:40px 1fr 40px;border:1px solid #dfc8bb;border-radius:14px;overflow:hidden;background:#fff}.counter button{border:0;background:#f8eee8;color:var(--brown);font-size:20px}.counter input{min-width:0;border:0;text-align:center;background:#fff;outline:0}
+.notice{padding:12px 13px;margin:2px 0 16px;border-radius:13px;background:#f6efea;color:#74594b;font-size:11.5px;line-height:1.5}.notice.ok{background:var(--green);color:var(--greenInk)}.notice.bad{background:var(--red);color:var(--redInk)}
+.helper{margin-top:6px;color:var(--muted);font-size:10.5px;line-height:1.5}.hidden{display:none!important}
+.oaCard{margin:4px 0 17px;padding:13px 14px;border:1px dashed #dfbba6;border-radius:14px;background:#fff7f2;color:#76584a;font-size:11.5px;line-height:1.6}.oaCard b{color:var(--ink)}
+.submit{width:100%;border:0;border-radius:14px;padding:13px;background:linear-gradient(#7b5039,#613928);color:#fff;font-weight:800;box-shadow:0 4px 0 #46291e;transition:.08s}.submit:active{transform:translateY(4px);box-shadow:0 0 0 #46291e}.submit:disabled{opacity:.55}
+.success{margin:22px 15px;padding:21px;border-radius:22px;background:var(--green);color:var(--greenInk);box-shadow:var(--shadow)}.success h2{margin:0 0 10px;font-size:24px}.success p{font-size:13px;line-height:1.7}.success .next{padding-top:14px;margin-top:14px;border-top:1px solid rgba(45,106,66,.15);font-size:12px;line-height:1.65}
+@media(min-width:600px){.app{max-width:430px;margin:auto}}
+</style>
+</head>
+<body>
+<main class="app">
+<header class="brand">
+  <div class="brandName">Chocolate</div>
+  <div class="brandSub">MAKEUP STUDIO</div>
+  <div class="magic">✦</div>
+</header>
+
+<section class="hero">
+  <h1>今天，想施什麼魔法？</h1>
+  <p>選一個重要日子，把漂亮的時間先留給你 ♡</p>
+</section>
+
+<div id="lineState" class="lineState">正在連接 LINE…</div>
+
+<div class="oaCard" style="margin:0 16px 14px;">
+  <b>預約小提醒 ♡</b><br>
+  線上送出後僅為「預定時間」，<b>完成訂金支付後，才會正式為你保留時段。</b>
+  妝造風格與參考照片可以在預約後回 LINE 再慢慢聊。
+</div>
+
+
+<section id="services" class="services">
+  <article class="service">
+    <div class="icon">🥨</div>
+    <div class="serviceText">
+      <h2>登記妝髮</h2>
+      <p>登記結婚、紀念日與重要時刻的妝髮。</p>
+      <span class="meta">女生約3小時／男生約1小時</span>
+    </div>
+    <button class="bookBtn" onclick="openForm('registration')">預約</button>
+  </article>
+
+  <article class="service">
+    <div class="icon">📷</div>
+    <div class="serviceText">
+      <h2>結婚專區</h2>
+      <p>拍婚紗、婚禮造型與新人相關需求。</p>
+      <span class="meta">依妝造套數估算檔期</span>
+    </div>
+    <button class="bookBtn" onclick="openForm('wedding')">預約</button>
+  </article>
+
+  <article class="service">
+    <div class="icon">✨</div>
+    <div class="serviceText">
+      <h2>妝髮換頭魔法</h2>
+      <p>約會、婚宴、活動、拍攝等單次妝髮。</p>
+      <span class="meta">每人目前約2.5小時</span>
+    </div>
+    <button class="bookBtn" onclick="openForm('makeover')">預約</button>
+  </article>
+
+  <article class="service" style="display:block">
+    <div style="display:flex;align-items:center;gap:13px;">
+      <div class="icon">🍮</div>
+      <div class="serviceText">
+        <h2>1 對 1 美妝教學</h2>
+        <p>從0開始、精緻升級，或加強特定妝容技巧都適合。</p>
+        <span class="meta">2026 年度已全數售完 🈵</span>
+      </div>
+      <button class="bookBtn" disabled style="opacity:.55">完售</button>
+    </div>
+    <div class="oaCard" style="margin:12px 0 0;">
+      🥨 11:00–15:00，一次4小時（不接受加時）<br>
+      ❗ 原則僅開放假日預約；特殊工作時段可再留言討論<br>
+      忠孝復興工作室 $3,200<br>
+      鶯歌居家工作室 $2,700（有貓🐈，怕貓者勿選）<br>
+      2027 年 1 月時段歡迎再詢問 ♡
+    </div>
+  </article>
+
+</section>
+
+<section id="formPage" class="formPage">
+<article class="formCard">
+<header class="formHead">
+  <button class="back" onclick="backToServices()">← 回到魔法選單</button>
+  <h2 id="formTitle"></h2>
+  <p>先把時間預定起來；完成訂金支付後，才會正式保留時段。</p>
+</header>
+<div class="formBody">
+  <div class="field"><label>想預約哪一天？</label><input id="date" class="control" type="date"></div>
+  <div class="field">
+    <label>希望幾點開始？</label>
+    <div class="timeGrid"><select id="hour" class="control"></select><div class="colon">:</div><select id="minute" class="control"></select></div>
+    <div class="helper">每5分鐘都可以選。</div>
+  </div>
+
+  <div id="peopleFields" class="field">
+    <label>今天要變漂亮的人數</label>
+    <div class="grid2">
+      <div><div class="counterLabel">女生</div><div class="counter"><button type="button" onclick="step('female',-1)">−</button><input id="female" value="1" readonly><button type="button" onclick="step('female',1)">＋</button></div></div>
+      <div><div class="counterLabel">男生</div><div class="counter"><button type="button" onclick="step('male',-1)">−</button><input id="male" value="0" readonly><button type="button" onclick="step('male',1)">＋</button></div></div>
+    </div>
+  </div>
+
+  <div id="setField" class="field hidden">
+    <label>預計幾套妝造？</label>
+    <div class="counter"><button type="button" onclick="step('sets',-1)">−</button><input id="sets" value="1" readonly><button type="button" onclick="step('sets',1)">＋</button></div>
+  </div>
+
+  <div id="availability" class="notice">選好日期與時間後，巧克力幫你看看檔期 ♡</div>
+
+  <div class="field"><label>怎麼稱呼你？</label><input id="name" class="control" autocomplete="name" placeholder="姓名"></div>
+  <div class="field"><label>聯絡手機</label><input id="phone" class="control" inputmode="tel" autocomplete="tel" placeholder="09xx-xxx-xxx"></div>
+  <div class="field"><label>在哪裡開妝？</label><select id="location" class="control" onchange="toggleArea()"></select></div>
+  <div id="areaField" class="field hidden"><label>到府的大概地區</label><input id="area" class="control" placeholder="例如：中壢區"><div class="helper">詳細地址之後在 LINE 再確認即可。</div></div>
+  <div class="field"><label>有沒有一定要先告訴巧克力的事？ <span style="font-weight:400;color:#9a7c6d">（選填）</span></label><textarea id="note" class="control" rows="3" placeholder="例如：12:00前需要完成、特殊行程安排等"></textarea></div>
+
+  <div class="oaCard"><b>照片先不用急著準備 ♡</b><br>預約完成後，再回 LINE 傳喜歡的妝感、髮型與參考照片，我們再一起慢慢討論。</div>
+
+  <button id="submit" class="submit" onclick="submitBooking()">先預定這個時間 ✦</button>
+  <div class="helper" style="text-align:center;margin-top:10px">此步驟不代表正式保留；完成訂金支付後才會鎖定檔期。</div>
+</div>
+</article>
+</section>
+
+<div id="result"></div>
+</main>
+
+<script>
+const LIFF_ID = '2011180525-A26EBkIG';
+const API_URL = 'https://script.google.com/macros/s/AKfycbxi5rwWSixQ7qAH39WSwfI6EQVkUgKRrAkVR7btnLeq_8LaOWFtmrhr0QM7FkNrDQHPSA/exec';
+let serviceId='',timer=null,lineReady=false,lineIdToken='';
+const names={registration:'登記妝髮',wedding:'結婚專區',makeover:'妝髮換頭魔法'};
+const $=id=>document.getElementById(id);
+
+async function initLiff(){
+  if(!LIFF_ID){$('lineState').className='lineState bad';$('lineState').textContent='目前還沒完成 LINE 預約設定。';return}
+  try{
+    await liff.init({liffId:LIFF_ID});
+    if(!liff.isLoggedIn()){liff.login({redirectUri:location.href});return}
+    lineIdToken=liff.getIDToken()||'';
+    const d=liff.getDecodedIDToken();
+    lineReady=!!lineIdToken;
+    $('lineState').className='lineState '+(lineReady?'ok':'bad');
+    $('lineState').textContent=lineReady?'✓ LINE 已連接'+(d&&d.name?'｜'+d.name:''):'LINE 登入資訊不完整，請重新開啟。';
+  }catch(e){console.error(e);$('lineState').className='lineState bad';$('lineState').textContent='LINE 連線失敗，請重新從官方帳號開啟。'}
+}
+
+function initForm(){
+  $('hour').innerHTML='<option value="">時</option>';
+  for(let i=0;i<24;i++){let v=String(i).padStart(2,'0');$('hour').innerHTML+=`<option value="${v}">${v}</option>`}
+  $('minute').innerHTML='<option value="">分</option>';
+  for(let i=0;i<60;i+=5){let v=String(i).padStart(2,'0');$('minute').innerHTML+=`<option value="${v}">${v}</option>`}
+  const today=new Date();today.setMinutes(today.getMinutes()-today.getTimezoneOffset());$('date').min=today.toISOString().slice(0,10);
+  ['date','hour','minute'].forEach(id=>$(id).addEventListener('change',scheduleCheck));
+}
+
+function openForm(id){
+  serviceId=id;$('services').style.display='none';$('formPage').style.display='block';$('result').innerHTML='';$('formTitle').textContent=names[id];
+  $('peopleFields').classList.toggle('hidden',id==='wedding');$('setField').classList.toggle('hidden',id!=='wedding');
+  $('female').value=1;$('male').value=0;$('sets').value=1;
+  $('location').innerHTML=id==='makeover'
+    ? '<option value="">請選擇</option><option>忠孝復興工作室</option><option>鶯歌工作室</option><option>到府服務</option>'
+    : '<option value="">請選擇</option><option>忠孝復興工作室</option><option>到府服務</option>';
+  toggleArea();scheduleCheck();window.scrollTo({top:0,behavior:'smooth'});
+}
+function backToServices(){$('formPage').style.display='none';$('services').style.display='block';window.scrollTo({top:0,behavior:'smooth'})}
+function step(id,d){let e=$(id),min=id==='sets'?1:0;e.value=Math.max(min,parseInt(e.value||0)+d);scheduleCheck()}
+function toggleArea(){$('areaField').classList.toggle('hidden',$('location').value!=='到府服務')}
+function selectedTime(){return $('hour').value&&$('minute').value?$('hour').value+':'+$('minute').value:''}
+function payload(){return{serviceId,date:$('date').value,time:selectedTime(),femaleCount:$('female').value,maleCount:$('male').value,setCount:$('sets').value}}
+function notice(cls,msg){$('availability').className='notice'+(cls?' '+cls:'');$('availability').textContent=msg}
+function scheduleCheck(){clearTimeout(timer);timer=setTimeout(checkAvailability,180)}
+
+function jsonp(params){
+  return new Promise((resolve,reject)=>{
+    const cb='cb_'+Date.now()+'_'+Math.random().toString(36).slice(2);
+    const s=document.createElement('script');
+    const cleanup=()=>{delete window[cb];s.remove()};
+    window[cb]=(data)=>{cleanup();resolve(data)};
+    s.onerror=()=>{cleanup();reject(new Error('API error'))};
+    const q=new URLSearchParams({...params,callback:cb});
+    s.src=API_URL+'?'+q.toString();
+    document.body.appendChild(s);
+    setTimeout(()=>{if(window[cb]){cleanup();reject(new Error('timeout'))}},8000);
+  });
+}
+
+function checkAvailability(){
+  const p=payload();
+  if(!p.date||!p.time){notice('','選好日期與時間後，巧克力幫你看看檔期 ♡');return}
+  notice('','正在翻翻巧克力的行事曆…');
+  jsonp({action:'check',...p}).then(r=>{
+    if(r&&r.available)notice('ok',`✓ 這個時間可以！預估服務到 ${r.serviceEnd}`);
+    else notice('bad',r&&r.message?r.message:'這個時間目前無法預約。');
+  }).catch(()=>notice('bad','檔期確認失敗，請再選一次時間。'));
+}
+
+function makeRequestId(){
+  if(window.crypto&&crypto.randomUUID)return crypto.randomUUID();
+  return Date.now()+'-'+Math.random().toString(36).slice(2);
+}
+
+async function pollStatus(requestId){
+  for(let i=0;i<12;i++){
+    await new Promise(r=>setTimeout(r,700));
+    const s=await jsonp({action:'status',requestId});
+    if(s&&s.status==='success')return s;
+    if(s&&s.status==='error')throw new Error(s.message||'預約失敗');
+  }
+  throw new Error('系統回應較久，請稍後確認 LINE 訊息。');
+}
+
+async function submitBooking(){
+  if(!lineReady||!lineIdToken){notice('bad','請先完成 LINE 登入，再送出預約。');return}
+  const p=payload();
+  Object.assign(p,{
+    action:'book',
+    requestId:makeRequestId(),
+    name:$('name').value.trim(),
+    phone:$('phone').value.trim(),
+    locationType:$('location').value,
+    area:$('area').value.trim(),
+    note:$('note').value.trim(),
+    idToken:lineIdToken
+  });
+
+  if(!p.name||!p.phone||!p.locationType){notice('bad','還差姓名、手機或開妝地點沒有填完喔。');return}
+  if(p.locationType==='到府服務'&&!p.area){notice('bad','到府服務先告訴巧克力大概在哪一區就好。');return}
+
+  const b=$('submit');
+  b.disabled=true;
+  b.textContent='正在幫你預定…';
+  notice('','正在確認最後檔期…');
+
+  try{
+    await fetch(API_URL,{
+      method:'POST',
+      mode:'no-cors',
+      headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},
+      body:new URLSearchParams(p)
+    });
+
+    const r=await pollStatus(p.requestId);
+    $('formPage').style.display='none';
+    $('result').innerHTML=`<section class="success">
+      <h2>時間先幫你登記好囉 ✓</h2>
+      <p><b>${r.service}</b><br>${r.date}　${r.time}<br>預估服務到 ${r.serviceEnd}</p>
+      <p style="font-size:12px">預約編號：${r.id}</p>
+      <div class="next">
+        <b>目前仍是「預定時間」♡</b><br>
+        完成訂金支付後，巧克力才會正式為你保留這個時段。接著可以直接回 LINE 傳妝感、髮型或參考照片。
+      </div>
+    </section>`;
+    window.scrollTo({top:0,behavior:'smooth'});
+  }catch(e){
+    notice('bad',e.message||'預約送出失敗，請再試一次。');
+  }finally{
+    b.disabled=false;
+    b.textContent='先預定這個時間 ✦';
+  }
+}
+
+initForm();
+initLiff();
+</script>
+</body>
+</html>
