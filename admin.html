@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Chocolate 預約管理</title>
+<style>
+:root{--bg:#fff8f3;--card:#fff;--ink:#4b2d22;--muted:#98786b;--brown:#74452f;--brown2:#5b3424;--line:#ead7cc;--soft:#f8eee8;--green:#eaf5ee;--greenInk:#2f6d44;--red:#fff0ed;--redInk:#a64c40;--shadow:0 12px 30px rgba(74,44,31,.08)}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;min-height:100%;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"PingFang TC","Noto Sans TC",sans-serif}
+button,input{font:inherit}
+body{padding-bottom:max(28px,env(safe-area-inset-bottom))}
+.app{width:min(100%,520px);margin:auto}
+.head{position:sticky;top:0;z-index:20;padding:18px 16px 13px;background:rgba(255,248,243,.94);backdrop-filter:blur(12px);border-bottom:1px solid rgba(234,215,204,.7)}
+.brand{font:italic 27px Georgia,serif}.sub{margin-top:2px;color:var(--muted);font-size:11px;letter-spacing:.12em}
+.login{padding:24px 16px}.loginCard{padding:22px;border:1px solid var(--line);border-radius:22px;background:#fff;box-shadow:var(--shadow)}.loginCard h1{margin:0 0 6px;font-size:23px}.loginCard p{margin:0 0 17px;color:var(--muted);font-size:13px;line-height:1.65}
+.control{width:100%;padding:13px 14px;border:1px solid #dcc3b5;border-radius:14px;background:#fff;font-size:16px;outline:0}
+.primary{width:100%;margin-top:11px;border:0;border-radius:14px;padding:13px;background:linear-gradient(#7b5039,#613928);color:#fff;font-weight:800;box-shadow:0 3px 0 #45291e}
+.primary:active{transform:translateY(3px);box-shadow:none}
+.dashboard{display:none}
+.tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;padding:13px 12px 5px}.tab{border:1px solid var(--line);border-radius:999px;padding:9px 5px;background:#fff;color:var(--muted);font-size:11px;font-weight:800}.tab.active{background:var(--brown);border-color:var(--brown);color:#fff}
+.summary{padding:5px 16px 8px;color:var(--muted);font-size:12px}
+.list{padding:0 12px}.booking{margin:10px 0;padding:16px;border:1px solid var(--line);border-radius:20px;background:var(--card);box-shadow:var(--shadow)}.top{display:flex;gap:10px;align-items:flex-start}.time{flex:0 0 76px;font-size:22px;font-weight:850;line-height:1.15}.date{display:block;margin-top:3px;color:var(--muted);font-size:10px;font-weight:600}.main{min-width:0;flex:1}.service{font-size:16px;font-weight:850}.name{margin-top:4px;font-size:13px}.status{display:inline-block;margin-top:7px;padding:5px 8px;border-radius:999px;background:#f6eee9;color:#745547;font-size:10px;font-weight:800}.status.confirmed{background:var(--green);color:var(--greenInk)}.status.released{background:#f1efee;color:#81736d}
+.details{margin-top:13px;padding:12px 13px;border-radius:14px;background:#fff9f6;color:#775b4f;font-size:12px;line-height:1.7}.details b{color:var(--ink)}.actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:13px}.btn{border:0;border-radius:13px;padding:11px 9px;font-size:12px;font-weight:850}.confirm{background:var(--brown);color:#fff}.release{background:#f8e7e2;color:#94493c}.restore{background:#f3ebe6;color:#6d5044}.wide{grid-column:1/-1}
+.empty{margin:40px 16px;text-align:center;color:var(--muted);font-size:13px;line-height:1.7}
+.loading{padding:35px;text-align:center;color:var(--muted)}
+.toast{position:fixed;left:50%;bottom:24px;z-index:99;transform:translateX(-50%) translateY(30px);opacity:0;pointer-events:none;transition:.2s;padding:10px 14px;border-radius:999px;background:#4c3228;color:#fff;font-size:12px;box-shadow:0 8px 24px rgba(0,0,0,.18)}.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.modal{position:fixed;inset:0;z-index:100;display:none;align-items:center;justify-content:center;padding:22px;background:rgba(50,32,23,.48);backdrop-filter:blur(3px)}.modal.show{display:flex}.modalCard{width:min(100%,350px);padding:21px;border-radius:22px;background:#fff;text-align:center;box-shadow:0 24px 60px rgba(0,0,0,.2)}.modalCard h3{margin:0 0 8px;font-size:20px}.modalCard p{margin:0;color:var(--muted);font-size:13px;line-height:1.7}.modalActions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:17px}.modalActions button{border:0;border-radius:13px;padding:11px;font-weight:800}.cancel{background:#f4ece7;color:#76584b}.ok{background:var(--brown);color:#fff}
+</style>
+</head>
+<body>
+<main class="app">
+<header class="head"><div class="brand">Chocolate</div><div class="sub">BOOKING MANAGER</div></header>
+
+<section id="login" class="login">
+  <div class="loginCard">
+    <h1>巧克力預約管理 ♡</h1>
+    <p>這個頁面只給巧克力自己使用。手機確認訂金後，可以直接鎖定時段；沒有付款或取消時，一鍵把時段重新開放。</p>
+    <input id="adminKey" class="control" type="password" autocomplete="current-password" placeholder="管理密碼">
+    <button class="primary" onclick="loginAdmin()">進入預約管理</button>
+  </div>
+</section>
+
+<section id="dashboard" class="dashboard">
+  <div class="tabs">
+    <button class="tab active" data-filter="pending" onclick="setFilter('pending',this)">待訂金</button>
+    <button class="tab" data-filter="confirmed" onclick="setFilter('confirmed',this)">已確認</button>
+    <button class="tab" data-filter="today" onclick="setFilter('today',this)">今日</button>
+    <button class="tab" data-filter="released" onclick="setFilter('released',this)">已釋放</button>
+  </div>
+  <div id="summary" class="summary"></div>
+  <div id="list" class="list"></div>
+</section>
+</main>
+
+<div id="toast" class="toast"></div>
+<div id="modal" class="modal"><div class="modalCard"><h3 id="modalTitle"></h3><p id="modalText"></p><div class="modalActions"><button class="cancel" onclick="hideModal()">先等等</button><button id="modalOk" class="ok">確定</button></div></div></div>
+
+<script>
+const API_URL='https://script.google.com/macros/s/AKfycbxi5rwWSixQ7qAH39WSwfI6EQVkUgKRrAkVR7btnLeq_8LaOWFtmrhr0QM7FkNrDQHPSA/exec';
+let adminKey=sessionStorage.getItem('choco_admin_key')||'';
+let filter='pending';
+let pendingAction=null;
+
+function jsonp(params){
+  return new Promise((resolve,reject)=>{
+    const cb='adm_'+Date.now()+'_'+Math.random().toString(36).slice(2);
+    const s=document.createElement('script');
+    const cleanup=()=>{delete window[cb];s.remove()};
+    window[cb]=(data)=>{cleanup();resolve(data)};
+    s.onerror=()=>{cleanup();reject(new Error('連線失敗'))};
+    s.src=API_URL+'?'+new URLSearchParams({...params,callback:cb}).toString();
+    document.body.appendChild(s);
+    setTimeout(()=>{if(window[cb]){cleanup();reject(new Error('連線逾時'))}},9000);
+  });
+}
+
+async function loginAdmin(){
+  const key=document.getElementById('adminKey').value.trim();
+  if(!key)return;
+  adminKey=key;
+  try{
+    const r=await jsonp({action:'admin_list',adminKey,filter:'pending'});
+    if(!r.ok && r.message)throw new Error(r.message);
+    sessionStorage.setItem('choco_admin_key',adminKey);
+    document.getElementById('login').style.display='none';
+    document.getElementById('dashboard').style.display='block';
+    render(r.items||[]);
+  }catch(e){
+    toast(e.message||'管理密碼錯誤');
+  }
+}
+
+async function load(){
+  const list=document.getElementById('list');
+  list.innerHTML='<div class="loading">正在整理預約…</div>';
+  try{
+    const r=await jsonp({action:'admin_list',adminKey,filter});
+    if(!r.ok && r.message)throw new Error(r.message);
+    render(r.items||[]);
+  }catch(e){
+    list.innerHTML='<div class="empty">'+escapeHtml(e.message||'讀取失敗')+'</div>';
+  }
+}
+
+function setFilter(f,el){
+  filter=f;
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  el.classList.add('active');
+  load();
+}
+
+function render(items){
+  document.getElementById('summary').textContent='共 '+items.length+' 筆';
+  const list=document.getElementById('list');
+  if(!items.length){
+    list.innerHTML='<div class="empty">這裡目前沒有預約 ♡</div>';
+    return;
+  }
+  list.innerHTML=items.map(card).join('');
+}
+
+function card(x){
+  const cls=x.status==='已確認'?'confirmed':(['已釋放','已取消'].includes(x.status)?'released':'');
+  let actionHtml='';
+  if(['待訂金','討論中'].includes(x.status)){
+    actionHtml=`<div class="actions">
+      <button class="btn confirm" onclick="askAction('${js(x.id)}','confirm_deposit','${js(x.name)}')">✓ 已收訂金</button>
+      <button class="btn release" onclick="askAction('${js(x.id)}','release','${js(x.name)}')">釋放時段</button>
+    </div>`;
+  } else if(x.status==='已確認'){
+    actionHtml=`<div class="actions"><button class="btn release wide" onclick="askAction('${js(x.id)}','release','${js(x.name)}')">取消並釋放時段</button></div>`;
+  } else {
+    actionHtml=`<div class="actions"><button class="btn restore wide" onclick="askAction('${js(x.id)}','restore_pending','${js(x.name)}')">恢復為待訂金</button></div>`;
+  }
+
+  const place=x.area?x.location+'｜'+x.area:x.location;
+  return `<article class="booking">
+    <div class="top">
+      <div class="time">${escapeHtml(x.time)}<span class="date">${escapeHtml(x.date.replaceAll('-','/'))}</span></div>
+      <div class="main">
+        <div class="service">${escapeHtml(x.service)}</div>
+        <div class="name">${escapeHtml(x.name)}｜${escapeHtml(x.phone)}</div>
+        <span class="status ${cls}">${escapeHtml(x.status)}</span>
+      </div>
+    </div>
+    <div class="details">
+      <b>預估服務至：</b>${escapeHtml(x.serviceEnd||'—')}<br>
+      <b>開妝地點：</b>${escapeHtml(place||'—')}<br>
+      ${x.note?'<b>需求：</b>'+escapeHtml(x.note):''}
+    </div>
+    ${actionHtml}
+  </article>`;
+}
+
+function askAction(id,action,name){
+  const map={
+    confirm_deposit:['確認收到訂金？','確認後這個時段會正式鎖定，並由 LINE 官方帳號通知 '+name+' 預約已成立。'],
+    release:['確定釋放時段？','釋放後，這個時間會立即重新開放給其他客人預約。'],
+    restore_pending:['恢復待訂金？','這筆預約會重新占用原本時段，狀態改回待訂金。']
+  };
+  pendingAction={id,action};
+  document.getElementById('modalTitle').textContent=map[action][0];
+  document.getElementById('modalText').textContent=map[action][1];
+  document.getElementById('modalOk').onclick=()=>{hideModal();runAction(id,action)};
+  document.getElementById('modal').classList.add('show');
+}
+function hideModal(){document.getElementById('modal').classList.remove('show')}
+
+async function runAction(id,action){
+  const requestId=(crypto.randomUUID?crypto.randomUUID():Date.now()+'-'+Math.random().toString(36).slice(2));
+  toast('正在更新…');
+  try{
+    await fetch(API_URL,{
+      method:'POST',
+      mode:'no-cors',
+      headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},
+      body:new URLSearchParams({action:'admin_update',adminKey,requestId,bookingId:id,adminAction:action})
+    });
+    for(let i=0;i<16;i++){
+      await new Promise(r=>setTimeout(r,350));
+      const s=await jsonp({action:'admin_status',adminKey,requestId});
+      if(s.status==='success'){toast(s.message||'已更新');await load();return}
+      if(s.status==='error')throw new Error(s.message||'更新失敗');
+    }
+    throw new Error('更新較久，請重新整理確認');
+  }catch(e){toast(e.message||'更新失敗')}
+}
+
+function toast(t){
+  const el=document.getElementById('toast');
+  el.textContent=t;el.classList.add('show');
+  clearTimeout(toast._t);toast._t=setTimeout(()=>el.classList.remove('show'),2200);
+}
+function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function js(s){return String(s??'').replace(/\\/g,'\\\\').replace(/'/g,"\\'")}
+
+if(adminKey){
+  document.getElementById('login').style.display='none';
+  document.getElementById('dashboard').style.display='block';
+  load();
+}
+</script>
+</body>
+</html>
