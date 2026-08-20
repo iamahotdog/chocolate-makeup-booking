@@ -30,7 +30,24 @@ button,input,select,textarea{font:inherit}
 .formHead{padding:17px 17px 14px;border-bottom:1px solid #efe2da;background:linear-gradient(#fffdfb,#fff9f5)}.back{border:0;background:none;padding:3px 0;color:var(--brown);font-size:13px;font-weight:800}
 .formHead h2{margin:11px 0 4px;font-size:23px}.formHead p{margin:0;color:var(--muted);font-size:11.5px;line-height:1.55}
 .formBody{padding:17px}.field{margin-bottom:16px}.field label{display:block;margin-bottom:7px;font-size:13px;font-weight:800}
-.control{width:100%;padding:13px 14px;border:1px solid #dfc8bb;border-radius:14px;background:#fff;color:var(--ink);outline:0}.control:focus{border-color:#b98364;box-shadow:0 0 0 4px rgba(185,131,100,.12)}
+.control{width:100%;max-width:100%;min-width:0;display:block;padding:13px 14px;border:1px solid #dfc8bb;border-radius:14px;background:#fff;color:var(--ink);outline:0}.control:focus{border-color:#b98364;box-shadow:0 0 0 4px rgba(185,131,100,.12)}
+input[type="date"]{
+  width:100%;
+  max-width:100%;
+  min-width:0;
+  display:block;
+  box-sizing:border-box;
+  -webkit-appearance:none;
+  appearance:none;
+  font-size:16px;
+  line-height:1.2;
+  overflow:hidden;
+}
+input[type="date"]::-webkit-date-and-time-value{
+  text-align:left;
+  min-height:1.2em;
+}
+
 .timeGrid{display:grid;grid-template-columns:1fr 22px 1fr;gap:7px;align-items:center}.colon{text-align:center;color:#bc8d73;font-weight:900}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}.counterLabel{font-size:10.5px;color:var(--muted);margin-bottom:5px}
 .counter{display:grid;grid-template-columns:40px 1fr 40px;border:1px solid #dfc8bb;border-radius:14px;overflow:hidden;background:#fff}.counter button{border:0;background:#f8eee8;color:var(--brown);font-size:20px}.counter input{min-width:0;border:0;text-align:center;background:#fff;outline:0}
@@ -124,7 +141,7 @@ button,input,select,textarea{font:inherit}
   <p>先把時間預定起來；完成訂金支付後，才會正式保留時段。</p>
 </header>
 <div class="formBody">
-  <div class="field"><label>想預約哪一天？</label><input id="date" class="control" type="date"></div>
+  <div class="field"><label>想預約哪一天？</label><input id="date" class="control" type="date" aria-label="預約日期"><div class="helper">只能選今天之後的日期；若選今天，已經過去的時間會自動排除。</div></div>
   <div class="field">
     <label>希望幾點開始？</label>
     <div class="timeGrid"><select id="hour" class="control"></select><div class="colon">:</div><select id="minute" class="control"></select></div>
@@ -185,11 +202,128 @@ async function initLiff(){
 
 function initForm(){
   $('hour').innerHTML='<option value="">時</option>';
-  for(let i=0;i<24;i++){let v=String(i).padStart(2,'0');$('hour').innerHTML+=`<option value="${v}">${v}</option>`}
+  for(let i=0;i<24;i++){
+    const v=String(i).padStart(2,'0');
+    $('hour').innerHTML+=`<option value="${v}">${v}</option>`;
+  }
+
   $('minute').innerHTML='<option value="">分</option>';
-  for(let i=0;i<60;i+=5){let v=String(i).padStart(2,'0');$('minute').innerHTML+=`<option value="${v}">${v}</option>`}
-  const today=new Date();today.setMinutes(today.getMinutes()-today.getTimezoneOffset());$('date').min=today.toISOString().slice(0,10);
-  ['date','hour','minute'].forEach(id=>$(id).addEventListener('change',scheduleCheck));
+  for(let i=0;i<60;i+=5){
+    const v=String(i).padStart(2,'0');
+    $('minute').innerHTML+=`<option value="${v}">${v}</option>`;
+  }
+
+  const now=new Date();
+  const localToday=
+    now.getFullYear()+'-'+
+    String(now.getMonth()+1).padStart(2,'0')+'-'+
+    String(now.getDate()).padStart(2,'0');
+
+  $('date').min=localToday;
+
+  $('date').addEventListener('change',()=>{
+    preventPastDate();
+    updateTimeOptions();
+    scheduleCheck();
+  });
+
+  $('hour').addEventListener('change',()=>{
+    updateMinuteOptionsForToday();
+    scheduleCheck();
+  });
+
+  $('minute').addEventListener('change',scheduleCheck);
+
+  preventPastDate();
+  updateTimeOptions();
+}
+
+
+function localDateString(d=new Date()){
+  return d.getFullYear()+'-'+
+    String(d.getMonth()+1).padStart(2,'0')+'-'+
+    String(d.getDate()).padStart(2,'0');
+}
+
+function preventPastDate(){
+  const value=$('date').value;
+  const today=localDateString();
+
+  if(value && value < today){
+    $('date').value='';
+    notice('bad','不能預約過去的日期喔，請重新選一天 ♡');
+    return false;
+  }
+  return true;
+}
+
+function isTodaySelected(){
+  return $('date').value === localDateString();
+}
+
+function updateTimeOptions(){
+  const now=new Date();
+  const today=isTodaySelected();
+
+  Array.from($('hour').options).forEach(opt=>{
+    if(!opt.value)return;
+    const hour=parseInt(opt.value,10);
+    opt.disabled = today && hour < now.getHours();
+  });
+
+  if(
+    $('hour').value &&
+    $('hour').selectedOptions[0] &&
+    $('hour').selectedOptions[0].disabled
+  ){
+    $('hour').value='';
+    $('minute').value='';
+  }
+
+  updateMinuteOptionsForToday();
+}
+
+function updateMinuteOptionsForToday(){
+  const now=new Date();
+  const today=isTodaySelected();
+  const selectedHour=parseInt($('hour').value,10);
+
+  Array.from($('minute').options).forEach(opt=>{
+    if(!opt.value)return;
+
+    if(today && Number.isFinite(selectedHour) && selectedHour===now.getHours()){
+      const minute=parseInt(opt.value,10);
+      // 至少保留約 5 分鐘操作時間；只開放下一個 5 分鐘刻度之後。
+      const minAllowed=Math.ceil((now.getMinutes()+1)/5)*5;
+      opt.disabled=minute < minAllowed;
+    }else{
+      opt.disabled=false;
+    }
+  });
+
+  if(
+    $('minute').value &&
+    $('minute').selectedOptions[0] &&
+    $('minute').selectedOptions[0].disabled
+  ){
+    $('minute').value='';
+  }
+}
+
+function validateNotPast(){
+  if(!preventPastDate())return false;
+
+  if(!$('date').value || !selectedTime())return true;
+
+  const selected=new Date($('date').value+'T'+selectedTime()+':00');
+  const now=new Date();
+
+  if(selected.getTime() <= now.getTime()){
+    notice('bad','這個時間已經過囉，請選現在之後的時間 ♡');
+    return false;
+  }
+
+  return true;
 }
 
 function openForm(id){
@@ -238,6 +372,37 @@ function makeRequestId(){
   return Date.now()+'-'+Math.random().toString(36).slice(2);
 }
 
+
+async function sendBookingSummaryToOfficialAccount(r,p){
+  // liff.sendMessages() 需要：
+  // 1. 從 LINE App 內的聊天開啟 MINI App
+  // 2. Channel scope 開啟 chat_message.write
+  if(!window.liff || !liff.isInClient())return false;
+
+  try{
+    await liff.sendMessages([
+      {
+        type:'text',
+        text:
+          '🥨 預約資料已填寫完成\n'+
+          '服務：'+r.service+'\n'+
+          '日期：'+r.date+'\n'+
+          '時間：'+r.time+'\n'+
+          '姓名：'+p.name+'\n'+
+          '手機：'+p.phone+'\n'+
+          '開妝地點：'+p.locationType+
+          (p.area ? '（'+p.area+'）' : '')+'\n'+
+          (p.note ? '補充：'+p.note+'\n' : '')+
+          '\n※目前僅為預定時間，完成訂金支付後才正式保留時段。'
+      }
+    ]);
+    return true;
+  }catch(err){
+    console.warn('liff.sendMessages failed',err);
+    return false;
+  }
+}
+
 async function pollStatus(requestId){
   for(let i=0;i<12;i++){
     await new Promise(r=>setTimeout(r,700));
@@ -279,6 +444,7 @@ async function submitBooking(){
     });
 
     const r=await pollStatus(p.requestId);
+    const sentToChat=await sendBookingSummaryToOfficialAccount(r,p);
     $('formPage').style.display='none';
     $('result').innerHTML=`<section class="success">
       <h2>時間先幫你登記好囉 ✓</h2>
@@ -286,7 +452,7 @@ async function submitBooking(){
       <p style="font-size:12px">預約編號：${r.id}</p>
       <div class="next">
         <b>目前仍是「預定時間」♡</b><br>
-        完成訂金支付後，巧克力才會正式為你保留這個時段。接著可以直接回 LINE 傳妝感、髮型或參考照片。
+        ${sentToChat?'預約資料已自動回傳到 LINE 官方帳號。':'完成訂金支付後，巧克力才會正式為你保留這個時段。'} 接著可以直接回 LINE 傳妝感、髮型或參考照片。
       </div>
     </section>`;
     window.scrollTo({top:0,behavior:'smooth'});
