@@ -21,7 +21,7 @@ body{padding-bottom:max(28px,env(safe-area-inset-bottom))}
 .tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;padding:13px 12px 5px}.tab{border:1px solid var(--line);border-radius:999px;padding:9px 5px;background:#fff;color:var(--muted);font-size:11px;font-weight:800}.tab.active{background:var(--brown);border-color:var(--brown);color:#fff}
 .summary{padding:5px 16px 8px;color:var(--muted);font-size:12px}
 .list{padding:0 12px}.booking{margin:10px 0;padding:16px;border:1px solid var(--line);border-radius:20px;background:var(--card);box-shadow:var(--shadow)}.top{display:flex;gap:10px;align-items:flex-start}.time{flex:0 0 76px;font-size:22px;font-weight:850;line-height:1.15}.date{display:block;margin-top:3px;color:var(--muted);font-size:10px;font-weight:600}.main{min-width:0;flex:1}.service{font-size:16px;font-weight:850}.name{margin-top:4px;font-size:13px}.status{display:inline-block;margin-top:7px;padding:5px 8px;border-radius:999px;background:#f6eee9;color:#745547;font-size:10px;font-weight:800}.status.confirmed{background:var(--green);color:var(--greenInk)}.status.released{background:#f1efee;color:#81736d}
-.details{margin-top:13px;padding:12px 13px;border-radius:14px;background:#fff9f6;color:#775b4f;font-size:12px;line-height:1.7}.details b{color:var(--ink)}.actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:13px}.btn{border:0;border-radius:13px;padding:11px 9px;font-size:12px;font-weight:850}.confirm{background:var(--brown);color:#fff}.release{background:#f8e7e2;color:#94493c}.restore{background:#f3ebe6;color:#6d5044}.wide{grid-column:1/-1}
+.details{margin-top:13px;padding:12px 13px;border-radius:14px;background:#fff9f6;color:#775b4f;font-size:12px;line-height:1.7}.details b{color:var(--ink)}.actions{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-top:13px}.btn{border:0;border-radius:13px;padding:11px 9px;font-size:12px;font-weight:850}.confirm{background:var(--brown);color:#fff}.release{background:#f8e7e2;color:#94493c}.restore{background:#f3ebe6;color:#6d5044}.wide{grid-column:1/-1}
 .empty{margin:40px 16px;text-align:center;color:var(--muted);font-size:13px;line-height:1.7}
 .loading{padding:35px;text-align:center;color:var(--muted)}
 .toast{position:fixed;left:50%;bottom:24px;z-index:99;transform:translateX(-50%) translateY(30px);opacity:0;pointer-events:none;transition:.2s;padding:10px 14px;border-radius:999px;background:#4c3228;color:#fff;font-size:12px;box-shadow:0 8px 24px rgba(0,0,0,.18)}.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
@@ -142,6 +142,13 @@ body{padding-bottom:max(28px,env(safe-area-inset-bottom))}
 .closeDays{background:var(--brown);color:#fff}
 .openDays{background:#f7e8e2;color:#954f40}
 
+
+.serviceSettingsList{padding:6px 12px 20px}
+.serviceSettingCard{display:flex;align-items:center;gap:12px;margin:10px 0;padding:15px;border:1px solid var(--line);border-radius:18px;background:#fff;box-shadow:var(--shadow)}
+.serviceSettingText{min-width:0;flex:1}.serviceSettingText b{display:block;font-size:14px}.serviceSettingText small{display:block;margin-top:4px;color:var(--muted);font-size:10px;line-height:1.5}
+.switch{position:relative;flex:0 0 48px;width:48px;height:28px;border:0;border-radius:999px;background:#ddd0c8;transition:.18s}
+.switch::after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;box-shadow:0 2px 5px rgba(0,0,0,.15);transition:.18s}
+.switch.on{background:var(--brown)}.switch.on::after{transform:translateX(20px)}
 </style>
 </head>
 <body>
@@ -167,6 +174,10 @@ body{padding-bottom:max(28px,env(safe-area-inset-bottom))}
     <button id="navVacation" class="managerNavBtn" onclick="showManagerPage('vacation')">
       <span class="navIcon">☾</span>
       <span><b>休假設定</b><small>整日不開放</small></span>
+    </button>
+    <button id="navServices" class="managerNavBtn" onclick="showManagerPage('services')">
+      <span class="navIcon">✦</span>
+      <span><b>服務設定</b><small>開啟・關閉</small></span>
     </button>
   </nav>
 
@@ -214,6 +225,18 @@ body{padding-bottom:max(28px,env(safe-area-inset-bottom))}
       </div>
     </div>
   </section>
+
+  <section id="servicesPage" class="managerPage hidden">
+    <div class="pageIntro">
+      <h1>服務設定</h1>
+      <p>控制客人首頁目前可以預約哪些服務。</p>
+    </div>
+
+    <div id="serviceSettingsList" class="serviceSettingsList">
+      <div class="loading">正在讀取服務設定…</div>
+    </div>
+  </section>
+
 </section>
 </main>
 
@@ -224,6 +247,7 @@ body{padding-bottom:max(28px,env(safe-area-inset-bottom))}
 const API_URL='https://script.google.com/macros/s/AKfycbxi5rwWSixQ7qAH39WSwfI6EQVkUgKRrAkVR7btnLeq_8LaOWFtmrhr0QM7FkNrDQHPSA/exec';
 let adminKey=sessionStorage.getItem('choco_admin_key')||'';
 let filter='pending';
+let adminLoadSeq=0;
 let pendingAction=null;
 let loadSeq=0;
 
@@ -236,7 +260,7 @@ function jsonp(params){
     s.onerror=()=>{cleanup();reject(new Error('連線失敗'))};
     s.src=API_URL+'?'+new URLSearchParams({...params,callback:cb}).toString();
     document.body.appendChild(s);
-    setTimeout(()=>{if(window[cb]){cleanup();reject(new Error('連線逾時'))}},9000);
+    setTimeout(()=>{if(window[cb]){cleanup();reject(new Error('連線逾時'))}},15000);
   });
 }
 
@@ -273,23 +297,25 @@ function adminLocalCacheSet(filter,items){
 }
 
 async function load(){
+  const seq=++adminLoadSeq;
   const list=document.getElementById('list');
   const cached=adminLocalCacheGet(filter);
-  if(cached){
-    render(cached);
-  }else{
-    list.innerHTML='<div class="loading">正在整理預約…</div>';
-  }
+
+  if(cached) render(cached);
+  else list.innerHTML='<div class="loading">正在整理預約…</div>';
 
   try{
     const r=await jsonp({action:'admin_list',adminKey,filter});
-    if(!r.ok && r.message)throw new Error(r.message);
+    if(seq!==adminLoadSeq) return;
+    if(!r.ok && r.message) throw new Error(r.message);
+
     const items=r.items||[];
     adminLocalCacheSet(filter,items);
     render(items);
   }catch(e){
-    if(!cached) list.innerHTML='<div class="empty">'+escapeHtml(e.message||'讀取失敗')+'</div>';
-    else toast('更新稍慢，先顯示最近資料');
+    if(seq!==adminLoadSeq) return;
+    if(!cached) list.innerHTML='<div class="empty">'+escapeHtml(e.message||'讀取失敗')+'<br><button class="btn restore" style="margin-top:12px" onclick="load()">重新整理</button></div>';
+    else toast('連線較慢，先顯示最近資料');
   }
 }
 
@@ -395,9 +421,12 @@ function showManagerPage(page){
   managerPage=page;
   document.getElementById('bookingsPage').classList.toggle('hidden',page!=='bookings');
   document.getElementById('vacationPage').classList.toggle('hidden',page!=='vacation');
+  document.getElementById('servicesPage').classList.toggle('hidden',page!=='services');
   document.getElementById('navBookings').classList.toggle('active',page==='bookings');
   document.getElementById('navVacation').classList.toggle('active',page==='vacation');
+  document.getElementById('navServices').classList.toggle('active',page==='services');
   if(page==='vacation') loadVacationMonth();
+  if(page==='services') loadServiceSettingsAdmin();
 }
 
 function shiftVacationMonth(delta){
@@ -490,6 +519,42 @@ async function applyVacationBulk(mode){
     selectedVacationDates.clear();
     renderVacationCalendar();
     toast(mode==='close'?'已設定休假日':'已恢復開放');
+  }catch(e){
+    toast(e.message||'更新失敗');
+  }
+}
+
+
+async function loadServiceSettingsAdmin(){
+  const box=document.getElementById('serviceSettingsList');
+  box.innerHTML='<div class="loading">正在讀取服務設定…</div>';
+  try{
+    const r=await jsonp({action:'admin_service_settings',adminKey});
+    const items=r.items||[];
+    box.innerHTML=items.map(x=>{
+      const lesson=x.id==='lesson';
+      const sub=lesson?'僅週六、週日，固定 11:00–15:00':'依目前預約規則開放';
+      return `<div class="serviceSettingCard">
+        <div class="serviceSettingText"><b>${escapeHtml(x.name)}</b><small>${sub}</small></div>
+        <button class="switch ${x.enabled?'on':''}" onclick="toggleServiceSetting('${x.id}',${!x.enabled})" aria-label="切換服務"></button>
+      </div>`;
+    }).join('');
+  }catch(e){
+    box.innerHTML='<div class="empty">讀取失敗<br><button class="btn restore" style="margin-top:12px" onclick="loadServiceSettingsAdmin()">重新整理</button></div>';
+  }
+}
+
+async function toggleServiceSetting(serviceId,enabled){
+  try{
+    toast('正在更新…');
+    await fetch(API_URL,{
+      method:'POST',
+      mode:'no-cors',
+      headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},
+      body:new URLSearchParams({action:'admin_service_update',adminKey,serviceId,enabled:String(enabled)})
+    });
+    setTimeout(loadServiceSettingsAdmin,300);
+    toast(enabled?'已開放服務':'已暫停服務');
   }catch(e){
     toast(e.message||'更新失敗');
   }

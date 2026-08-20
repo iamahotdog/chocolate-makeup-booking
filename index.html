@@ -338,6 +338,10 @@ body.modalOpen{
 
 
 .successConfirmed{display:inline-block;margin:2px 0 8px;padding:6px 11px;border-radius:999px;background:#f4e3da;color:#754634;font-size:11px;font-weight:800}
+
+.formLineBadge{display:inline-flex;margin-top:9px;padding:5px 9px;border-radius:999px;background:#f4ece7;color:#7b5b4e;font-size:9.8px;font-weight:750}
+.formLineBadge.ok{background:#edf7f0;color:#2d6a42}
+.formLineBadge.bad{background:#fff0ed;color:#a44338}
 </style>
 </head>
 <body>
@@ -393,7 +397,7 @@ body.modalOpen{
         <p>從0開始、精緻升級，或加強特定妝容技巧都適合。</p>
         <span class="meta"></span>
       </div>
-      <button class="bookBtn" disabled style="opacity:.55">完售</button>
+      <button id="lessonBookBtn" class="bookBtn" onclick="openForm('lesson')" disabled style="opacity:.55">目前未開放</button>
     </div>
     <div class="oaCard" style="margin:12px 0 0;">
       🥨 11:00–15:00，一次4小時（不接受加時）<br>
@@ -409,7 +413,7 @@ body.modalOpen{
 <header class="formHead">
   <button class="back" onclick="backToServices()">← 回到魔法選單</button>
   <h2 id="formTitle"></h2>
-  <p>先把時間預定起來；完成訂金支付後，才會正式保留時段。</p>
+  <p>先把時間預定起來；完成訂金支付後，才會正式保留時段。</p><div id="formLineBadge" class="formLineBadge">LINE 連線確認中…</div>
 </header>
 <div class="formBody">
   <div class="field"><label class="requiredLabel">想預約哪一天？</label><input id="date" class="control" type="date" aria-label="預約日期" required></div>
@@ -545,7 +549,7 @@ body.modalOpen{
 const LIFF_ID = '2011180527-2I2I2ztI';
 const API_URL = 'https://script.google.com/macros/s/AKfycbxi5rwWSixQ7qAH39WSwfI6EQVkUgKRrAkVR7btnLeq_8LaOWFtmrhr0QM7FkNrDQHPSA/exec';
 let serviceId='',timer=null,lineReady=false,lineIdToken='',lineAccessToken='',suppressDateModal=false;
-const names={registration:'登記妝髮',wedding:'拍婚紗專區',makeover:'妝髮換頭魔法'};
+const names={registration:'登記妝髮',wedding:'拍婚紗專區',makeover:'妝髮換頭魔法',lesson:'1 對 1 美妝教學'};
 const $=id=>document.getElementById(id);
 
 
@@ -607,7 +611,11 @@ async function refreshLineIdentity(){
     lineAccessToken = liff.getAccessToken() || '';
 
     // ID token 需要 openid；access token 可作為後端驗證備援。
-    lineReady = !!(lineIdToken || lineAccessToken);
+    lineReady=!!(lineIdToken || lineAccessToken);
+    if($('formLineBadge')){
+      $('formLineBadge').className='formLineBadge '+(lineReady?'ok':'bad');
+      $('formLineBadge').textContent=lineReady?'LINE 已連接':'LINE 尚未連接';
+    }
     return lineReady;
   }catch(e){
     console.error('refreshLineIdentity',e);
@@ -872,17 +880,57 @@ function validateNotPast(){
   return true;
 }
 
+
+let serviceSettings={registration:true,wedding:true,makeover:true,lesson:false};
+
+async function loadServiceSettings(){
+  try{
+    const r=await jsonp({action:'public_service_settings'});
+    (r.items||[]).forEach(x=>serviceSettings[x.id]=!!x.enabled);
+
+    ['registration','wedding','makeover'].forEach(id=>{
+      const btn=document.querySelector(`[onclick="openForm('${id}')"]`);
+      if(btn){
+        btn.disabled=!serviceSettings[id];
+        btn.style.opacity=serviceSettings[id]?'1':'.55';
+        btn.textContent=serviceSettings[id]?'預約':'暫未開放';
+      }
+    });
+
+    const lessonBtn=$('lessonBookBtn');
+    const lessonText=$('lessonStatusText');
+    if(lessonBtn){
+      lessonBtn.disabled=!serviceSettings.lesson;
+      lessonBtn.style.opacity=serviceSettings.lesson?'1':'.55';
+      lessonBtn.textContent=serviceSettings.lesson?'預約':'目前未開放';
+    }
+    if(lessonText){
+      lessonText.textContent=serviceSettings.lesson?'週六、週日｜11:00–15:00':'目前未開放預約';
+    }
+  }catch(e){
+    console.warn('service settings failed',e);
+  }
+}
+
 function openForm(id){
+  if(serviceSettings[id]===false){
+    showBrandModal({title:'目前暫未開放預約',text:'之後有開放時段再來找巧克力 ♡',primaryText:'知道了'});
+    return;
+  }
   serviceId=id;
   setTimeout(syncConditionalRequired,0);$('services').style.display='none';$('formPage').style.display='block';$('result').innerHTML='';$('formTitle').textContent=names[id];
-  $('peopleFields').classList.toggle('hidden',id==='wedding');$('setField').classList.toggle('hidden',id!=='wedding');
+  $('peopleFields').classList.toggle('hidden',id==='wedding' || id==='lesson');$('setField').classList.toggle('hidden',id!=='wedding');
   $('female').value=1;$('male').value=0;$('sets').value=1;
-  $('location').innerHTML=id==='makeover'
+  $('location').innerHTML=id==='lesson' ? '<option value="">請選擇</option><option>忠孝復興工作室</option><option>鶯歌工作室</option>' : id==='makeover'
     ? '<option value="">請選擇</option><option>忠孝復興工作室</option><option>鶯歌工作室</option><option>到府服務／自選地點</option>'
     : '<option value="">請選擇</option><option>忠孝復興工作室</option><option>到府服務／自選地點</option>';
   $('registrationExtra').classList.toggle('hidden',id!=='registration');
   $('makeoverExtra').classList.toggle('hidden',id!=='makeover');
   $('weddingExtra').classList.toggle('hidden',id!=='wedding');
+  if(id==='lesson'){
+    $('hour').value='11';
+    $('minute').value='00';
+  }
   toggleArea();refreshAllowedTimeOptions();scheduleCheck();window.scrollTo({top:0,behavior:'smooth'});
 }
 function backToServices(){$('formPage').style.display='none';$('services').style.display='block';window.scrollTo({top:0,behavior:'smooth'})}
@@ -925,6 +973,9 @@ function isAllowedStartTime(time,dateValue){
   if(!dateStr) return false;
   const d=new Date(dateStr+'T12:00:00');
   const day=d.getDay();
+  if(serviceId==='lesson'){
+    return (day===0 || day===6) && time==='11:00';
+  }
   if(day===0 || day===6) return true;
   const [h,m]=time.split(':').map(Number);
   const mins=h*60+m;
@@ -1143,6 +1194,38 @@ function validateRequiredFields(){
   return true;
 }
 
+
+function finalizeBookingSuccess(r,p){
+  $('formPage').style.display='none';
+  $('result').innerHTML=`<section class="successWarm">
+    <div class="successHero">
+      <h2>期待巧克力施魔法的日子 ♡</h2>
+      <p class="successConfirmed">預約資料已送出</p>
+      <p>時間先幫您登記好囉<br>${displayDateTime(r.date,r.time)}</p>
+    </div>
+
+    <div class="successSection">
+      <div class="successSectionTitle">接下來再麻煩您傳給巧克力 ♡</div>
+      <div class="successSectionBody">
+        <ol>
+          <li>1 張面光、清楚的素顏照。</li>
+          <li>2 張能清楚看見五官的生活照。</li>
+          <li>喜歡的妝感、髮型或參考照片，風格細節會再透過 LINE 一起討論確認。</li>
+        </ol>
+      </div>
+    </div>
+
+    <div class="successSection">
+      <div class="successSectionTitle">檔期保留方式</div>
+      <div class="successSectionBody">
+        <p>若同一時段有不同人詢問，將以 <b>先完成訂金支付者</b> 為優先預約成功的對象。</p>
+        <p class="depositEmphasis">記得要完成訂金支付，才會真正保留這個時段喔 ♡</p>
+      </div>
+    </div>
+  </section>`;
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
 async function submitBooking(){
   if(!validateRequiredFields()) return;
 
@@ -1208,35 +1291,15 @@ async function submitBooking(){
 
     const r=await pollStatus(p.requestId);
 
-    // 預約建立成功就立即顯示完成畫面，不等待 LINE 訊息。
-    $('formPage').style.display='none';
-    $('result').innerHTML=`<section class="successWarm">
-      <div class="successHero">
-        <h2>期待巧克力施魔法的日子 ♡</h2>
-        <p class="successConfirmed">預約資料已送出</p>
-        <p>時間先幫您登記好囉<br>${displayDateTime(r.date,r.time)}</p>
-      </div>
+    // 後端確認成功後，先切換成功畫面，再處理任何 LINE 對話。
+    finalizeBookingSuccess(r,p);
 
-      <div class="successSection">
-        <div class="successSectionTitle">接下來再麻煩您傳給巧克力 ♡</div>
-        <div class="successSectionBody">
-          <ol>
-            <li>1 張面光、清楚的素顏照。</li>
-            <li>2 張能清楚看見五官的生活照。</li>
-            <li>喜歡的妝感、髮型或參考照片，風格細節會再透過 LINE 一起討論確認。</li>
-          </ol>
-        </div>
-      </div>
-
-      <div class="successSection">
-        <div class="successSectionTitle">檔期保留方式</div>
-        <div class="successSectionBody">
-          <p>若同一時段有不同人詢問，將以 <b>先完成訂金支付者</b> 為優先預約成功的對象。</p>
-          <p class="depositEmphasis">記得要完成訂金支付，才會是真正的預約成功喔 ♡</p>
-        </div>
-      </div>
-    </section>`;
-    window.scrollTo({top:0,behavior:'smooth'});
+    // LINE 摘要只做背景補送，不再影響畫面。
+    if(lineReady && window.liff && liff.isInClient()){
+      Promise.resolve()
+        .then(()=>sendBookingSummaryToOfficialAccount(r,p))
+        .catch(err=>console.warn('LINE summary failed',err));
+    }
 
     // MINI App 內才背景補送摘要；失敗不影響成功畫面。
     if(lineReady && window.liff && liff.isInClient()){
@@ -1253,6 +1316,7 @@ async function submitBooking(){
 }
 
 initForm();
+loadServiceSettings();
 initLiff();
 </script>
 </body>
