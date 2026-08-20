@@ -4,38 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Chocolate Makeup Studio｜預約</title>
-<script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js">
-function setBookingDateToTomorrow(){
-  const el = document.getElementById('date');
-  if(!el) return;
-
-  const tomorrow = new Date();
-  tomorrow.setHours(12,0,0,0);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-
-  const y = tomorrow.getFullYear();
-  const mo = String(tomorrow.getMonth() + 1).padStart(2,'0');
-  const da = String(tomorrow.getDate()).padStart(2,'0');
-  const tomorrowStr = `${y}-${mo}-${da}`;
-
-  el.min = tomorrowStr;
-  if(!el.value || el.value < tomorrowStr){
-    el.value = tomorrowStr;
-  }
-}
-document.addEventListener('DOMContentLoaded', setBookingDateToTomorrow);
-
-
-const bookingDateObserver = new MutationObserver(()=>{
-  const el=document.getElementById('date');
-  if(el && !el.dataset.tomorrowReady){
-    el.dataset.tomorrowReady='1';
-    setBookingDateToTomorrow();
-  }
-});
-bookingDateObserver.observe(document.body,{childList:true,subtree:true});
-
-</script>
+<script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <style>
 :root{
  --cream:#fffaf5;--paper:#fffdfb;--ink:#4b2d20;--brown:#70432f;--muted:#9a7c6d;
@@ -711,9 +680,10 @@ function initForm(){
     String(tomorrow.getDate()).padStart(2,'0');
 
   $('date').min=localTomorrow;
+  $('date').value=localTomorrow;
 
   $('date').addEventListener('change',()=>{
-    preventPastDate();
+    if(!validateBookingDateFromUser()) return;
     updateTimeOptions();
     scheduleCheck();
   });
@@ -725,7 +695,6 @@ function initForm(){
 
   $('minute').addEventListener('change',scheduleCheck);
 
-  preventPastDate();
   updateTimeOptions();
 
   $('phone').addEventListener('input',()=>{
@@ -740,35 +709,59 @@ function localDateString(d=new Date()){
     String(d.getDate()).padStart(2,'0');
 }
 
-function preventPastDate(){
-  const value=$('date').value;
-  const today=localDateString();
+function validateBookingDateFromUser(){
+  const el=$('date');
+  const value=el.value;
+  if(!value) return false;
 
-  if(value && value <= today){
-    $('date').value='';
-    $('hour').value='';
-    $('minute').value='';
+  const now=new Date();
+  const tomorrow=new Date(now.getFullYear(),now.getMonth(),now.getDate()+1);
+  const minDate=localDateString(tomorrow);
 
-    if(!suppressDateModal){
-      suppressDateModal=true;
-      showBrandModal({
-        title:'今天的魔法時段已經收單囉🪄',
-        text:'請幫我選明天之後的日期･.｡*',
-        primaryText:'重新選日期',
-        onPrimary:()=>{
-          // 重新開啟日期選擇時才解除，避免點時間欄又重複跳窗。
-          setTimeout(()=>{
-            suppressDateModal=false;
-            try{$('date').showPicker && $('date').showPicker();}catch(_){}
-            $('date').focus();
-          },80);
-        }
-      });
-    }
-    return false;
+  // 明天（含）之後一律合法，不顯示任何警告。
+  if(value >= minDate){
+    suppressDateModal=false;
+    return true;
   }
 
-  if(value > today) suppressDateModal=false;
+  // 只有使用者實際選到今天或過去日期才顯示提醒。
+  el.value=minDate;
+  $('hour').value='';
+  $('minute').value='';
+
+  if(!suppressDateModal){
+    suppressDateModal=true;
+    showBrandModal({
+      title:'今天的魔法時段已經收單囉🪄',
+      text:'請幫我選明天之後的日期･.｡*',
+      primaryText:'重新選日期',
+      onPrimary:()=>{
+        closeBrandModal();
+        suppressDateModal=false;
+        setTimeout(()=>{
+          try{el.showPicker && el.showPicker();}catch(_){}
+          el.focus();
+        },120);
+      }
+    });
+  }
+  return false;
+}
+
+// 保留舊函式名稱，避免其他既有程式呼叫時出錯；
+// 但不再主動彈窗，只負責把無效日期校正為明天。
+function preventPastDate(){
+  const el=$('date');
+  if(!el || !el.value) return true;
+
+  const now=new Date();
+  const tomorrow=new Date(now.getFullYear(),now.getMonth(),now.getDate()+1);
+  const minDate=localDateString(tomorrow);
+
+  if(el.value < minDate){
+    el.value=minDate;
+    return false;
+  }
   return true;
 }
 
