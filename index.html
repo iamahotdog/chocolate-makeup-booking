@@ -417,7 +417,7 @@ body.modalOpen{
 </header>
 <div class="formBody">
   <div class="field"><label class="requiredLabel">想預約哪一天？</label><input id="date" class="control" type="date" aria-label="預約日期" required></div>
-  <div class="field">
+  <div id="timeField" class="field">
     <label class="requiredLabel">希望幾點開始？</label>
     <div class="timeGrid"><select id="hour" class="control" required></select><div class="colon">:</div><select id="minute" class="control" required></select></div><div class="fieldHint">平日開妝時間可選至 10:00，14:00 後重新開放；假日全時段開放。</div>
     
@@ -439,7 +439,7 @@ body.modalOpen{
   <div id="availability" class="notice hidden"></div>
 
   <div class="field"><label class="requiredLabel">怎麼稱呼你？</label><input id="name" class="control" autocomplete="name" placeholder="姓名" required></div>
-  <div class="field"><label class="requiredLabel">聯絡手機</label><input id="phone" class="control" type="tel" inputmode="numeric" autocomplete="tel" maxlength="10" pattern="[0-9]{10}" placeholder="0912345678" required><div class="fieldHint">除非 LINE 聯繫不到您，否則不會使用電話聯繫 ♡</div></div>
+  <div class="field"><label class="requiredLabel">聯絡手機</label><input id="phone" class="control" type="tel" inputmode="numeric" autocomplete="tel" maxlength="10" pattern="[0-9]{10}" placeholder="0912345678" required><div class="fieldHint">主要以 LINE 訊息聯繫為主，非必要不會使用電話聯繫</div></div>
   <div class="field"><label class="requiredLabel">在哪裡開妝？</label><select id="location" class="control" onchange="toggleArea()" required></select></div>
   <div id="areaField" class="field hidden"><label class="requiredLabel">開妝詳細地點</label><input id="area" class="control" placeholder="例：臺北市信義區○○路／臺北車站附近飯店" required><div class="helper">請填寫詳細地址或附近地標，以便確認交通距離與報價 ♡</div></div>
   
@@ -490,6 +490,16 @@ body.modalOpen{
     <div class="field">
       <label class="requiredLabel">妝髮目的</label>
       <input id="makeupPurpose" class="control" type="text" placeholder="個人拍攝、情侶寫真、參與活動…" required>
+    </div>
+
+    <div class="field">
+      <label class="requiredLabel">是否需要跟妝？</label>
+      <select id="makeoverFollowMakeup" class="control" required>
+        <option value="">請選擇</option>
+        <option value="不需要">不需要</option>
+        <option value="需要">需要</option>
+      </select>
+      <div class="fieldHint">跟妝費用為 $600／小時。</div>
     </div>
 
     <div class="field">
@@ -722,10 +732,11 @@ function initForm(){
   $('date').value=localTomorrow;
 
   $('date').addEventListener('change',()=>{
+    if(!validateLessonDate()) return;
     if(!validateBookingDateFromUser()) return;
     updateTimeOptions();
     refreshAllowedTimeOptions();
-    scheduleCheck();
+    loadDayOccupancy(true);scheduleCheck();
   });
 
   $('hour').addEventListener('change',()=>{
@@ -919,7 +930,7 @@ function openForm(id){
   }
   serviceId=id;
   setTimeout(syncConditionalRequired,0);$('services').style.display='none';$('formPage').style.display='block';$('result').innerHTML='';$('formTitle').textContent=names[id];
-  $('peopleFields').classList.toggle('hidden',id==='wedding' || id==='lesson');$('setField').classList.toggle('hidden',id!=='wedding');
+  $('peopleFields').classList.toggle('hidden',id==='lesson');$('setField').classList.add('hidden');
   $('female').value=1;$('male').value=0;$('sets').value=1;
   $('location').innerHTML=id==='lesson' ? '<option value="">請選擇</option><option>忠孝復興工作室</option><option>鶯歌工作室</option>' : id==='makeover'
     ? '<option value="">請選擇</option><option>忠孝復興工作室</option><option>鶯歌工作室</option><option>到府服務／自選地點</option>'
@@ -927,14 +938,15 @@ function openForm(id){
   $('registrationExtra').classList.toggle('hidden',id!=='registration');
   $('makeoverExtra').classList.toggle('hidden',id!=='makeover');
   $('weddingExtra').classList.toggle('hidden',id!=='wedding');
+  $('timeField').classList.toggle('hidden',id==='lesson');
   if(id==='lesson'){
     $('hour').value='11';
     $('minute').value='00';
   }
-  toggleArea();refreshAllowedTimeOptions();scheduleCheck();window.scrollTo({top:0,behavior:'smooth'});
+  toggleArea();loadDayOccupancy(true);refreshAllowedTimeOptions();scheduleCheck();window.scrollTo({top:0,behavior:'smooth'});
 }
 function backToServices(){$('formPage').style.display='none';$('services').style.display='block';window.scrollTo({top:0,behavior:'smooth'})}
-function step(id,d){let e=$(id),min=id==='sets'?1:0;e.value=Math.max(min,parseInt(e.value||0)+d);scheduleCheck()}
+function step(id,d){let e=$(id),min=id==='sets'?1:0;e.value=Math.max(min,parseInt(e.value||0)+d);refreshAllowedTimeOptions();scheduleCheck()}
 
 function syncConditionalRequired(){
   const isRegistration=serviceId==='registration';
@@ -946,7 +958,7 @@ function syncConditionalRequired(){
     if($(id)) $(id).required=isRegistration;
   });
 
-  ['makeupStyle','makeupPurpose','accessoryRental'].forEach(id=>{
+  ['makeupStyle','makeupPurpose','makeoverFollowMakeup','accessoryRental'].forEach(id=>{
     if($(id)) $(id).required=isMakeover;
   });
 
@@ -967,6 +979,23 @@ function toggleArea(){
   }
 }
 
+
+function validateLessonDate(){
+  if(serviceId!=='lesson' || !$('date').value) return true;
+  const d=new Date($('date').value+'T12:00:00');
+  const day=d.getDay();
+  if(day!==0 && day!==6){
+    showBrandModal({
+      title:'美妝教學目前只開週末 ♡',
+      text:'1 對 1 美妝教學目前僅開放週六、週日。若固定時段真的無法配合，也可以直接私訊巧克力討論。',
+      primaryText:'重新選日期'
+    });
+    $('date').value='';
+    return false;
+  }
+  return true;
+}
+
 function isAllowedStartTime(time,dateValue){
   if(!time) return false;
   const dateStr=dateValue || ($('date') ? $('date').value : '');
@@ -982,6 +1011,57 @@ function isAllowedStartTime(time,dateValue){
   return mins <= 600 || mins >= 840;
 }
 
+
+let dayOccupancyCache={};
+let currentDayOccupancy=null;
+let occupancySeq=0;
+
+function dayOccupancyKey(){
+  return serviceId+'|'+$('date').value;
+}
+
+async function loadDayOccupancy(force=false){
+  const date=$('date').value;
+  if(!date) return;
+
+  const key=dayOccupancyKey();
+  const cached=dayOccupancyCache[key];
+  if(cached && !force && Date.now()-cached.ts<15000){
+    currentDayOccupancy=cached.data;
+    refreshAllowedTimeOptions();
+    return;
+  }
+
+  const seq=++occupancySeq;
+  try{
+    const r=await jsonp({action:'day_occupancy',date});
+    if(seq!==occupancySeq)return;
+    if(!r || r.ok===false) return;
+    currentDayOccupancy=r;
+    dayOccupancyCache[key]={ts:Date.now(),data:r};
+    refreshAllowedTimeOptions();
+  }catch(e){
+    console.warn('day occupancy failed',e);
+  }
+}
+
+function overlapsOccupied(startTime){
+  if(!currentDayOccupancy || currentDayOccupancy.date!==$('date').value) return false;
+  if(currentDayOccupancy.closedDay) return true;
+
+  const [h,m]=startTime.split(':').map(Number);
+  const start=h*60+m;
+  const duration=estimateServiceMinutesLocal();
+  const end=start+duration+30; // 與後端 buffer 一致
+  if(!duration || end>1440) return true;
+
+  return (currentDayOccupancy.intervals||[]).some(x=>start<x.end && end>x.start);
+}
+
+function isSelectableStartTime(time,dateValue){
+  return isAllowedStartTime(time,dateValue) && !overlapsOccupied(time);
+}
+
 function refreshAllowedTimeOptions(){
   const hourEl=$('hour');
   const minuteEl=$('minute');
@@ -991,7 +1071,7 @@ function refreshAllowedTimeOptions(){
     if(!opt.value) return;
     const h=Number(opt.value);
     const hasAllowed=[0,5,10,15,20,25,30,35,40,45,50,55]
-      .some(m=>isAllowedStartTime(
+      .some(m=>isSelectableStartTime(
         String(h).padStart(2,'0')+':'+String(m).padStart(2,'0'),
         $('date').value
       ));
@@ -1012,7 +1092,7 @@ function refreshAllowedTimeOptions(){
   // 選小時後，再依平日／假日規則控制分鐘。
   Array.from(minuteEl.options).forEach(opt=>{
     if(!opt.value) return;
-    opt.disabled=!isAllowedStartTime(h+':'+opt.value,$('date').value);
+    opt.disabled=!isSelectableStartTime(h+':'+opt.value,$('date').value);
   });
 
   if(hourEl.selectedOptions[0] && hourEl.selectedOptions[0].disabled){
@@ -1030,7 +1110,30 @@ function refreshAllowedTimeOptions(){
 }
 
 
-function selectedTime(){return $('hour').value&&$('minute').value?$('hour').value+':'+$('minute').value:''}
+
+function estimateServiceMinutesLocal(){
+  const f=parseInt($('female').value||0,10);
+  const m=parseInt($('male').value||0,10);
+
+  if(serviceId==='registration' || serviceId==='wedding'){
+    return f*180 + m*60;
+  }
+  if(serviceId==='makeover'){
+    return f*150 + m*60;
+  }
+  if(serviceId==='lesson') return 240;
+  return 0;
+}
+
+function addMinutesToTime(time,minutes){
+  if(!time)return '';
+  const [h,m]=time.split(':').map(Number);
+  const total=h*60+m+minutes;
+  if(total<0 || total>1440)return '';
+  return String(Math.floor(total/60)).padStart(2,'0')+':'+String(total%60).padStart(2,'0');
+}
+
+function selectedTime(){if(serviceId==='lesson')return '11:00';return $('hour').value&&$('minute').value?$('hour').value+':'+$('minute').value:''}
 function payload(){return{serviceId,date:$('date').value,time:selectedTime(),femaleCount:$('female').value,maleCount:$('male').value,setCount:$('sets').value}}
 function notice(cls,msg){
   const box=$('availability');
@@ -1060,12 +1163,33 @@ function jsonp(params){
 
 function checkAvailability(){
   const p=payload();
-  if(!p.date||!p.time){notice('','選好日期與時間後，巧克力幫你看看檔期 ♡');return}
+  if(!p.date || !p.time){
+    notice('','選好日期與時間後，巧克力幫你看看檔期 ♡');
+    return;
+  }
+
+  if(serviceId==='lesson'){
+    if(!validateLessonDate()) return;
+    notice('ok','1 對 1 美妝教學固定 11:00–15:00 ♡');
+    return;
+  }
+
+  // 已取得當日占用資料時，直接在手機端判斷，不再每次點時間都等待 Apps Script。
+  if(currentDayOccupancy && currentDayOccupancy.date===p.date){
+    if(!isSelectableStartTime(p.time,p.date)){
+      notice('bad','這個開始時間會和其他預約或關閉時段重疊，請換一個時間 ♡');
+      return;
+    }
+    const end=addMinutesToTime(p.time,estimateServiceMinutesLocal());
+    notice('ok',`預估完成變漂亮的時間：約 ${end} ♡`);
+    return;
+  }
+
   notice('','正在確認檔期…');
   jsonp({action:'check',...p}).then(r=>{
-    if(r&&r.available)notice('ok',`預估完成變漂亮的時間：約 ${r.serviceEnd} ♡`);
+    if(r&&r.available) notice('ok',`預估完成變漂亮的時間：約 ${r.serviceEnd} ♡`);
     else notice('bad',r&&r.message?r.message:'這個時間目前無法預約。');
-  }).catch(()=>notice('bad','檔期確認失敗，請再選一次時間。'));
+  }).catch(()=>notice('bad','檔期確認較慢，請稍後再選一次時間。'));
 }
 
 function makeRequestId(){
@@ -1101,6 +1225,7 @@ async function sendBookingSummaryToOfficialAccount(r,p){
     if(p.serviceId==='makeover'){
       if(p.makeupStyle) extra+='妝造風格：'+p.makeupStyle+'\n';
       if(p.makeupPurpose) extra+='妝髮目的：'+p.makeupPurpose+'\n';
+      if(p.makeoverFollowMakeup) extra+='跟妝：'+p.makeoverFollowMakeup+'\n';
       if(p.accessoryRental) extra+='租借飾品：'+p.accessoryRental+'\n';
     }
     if(p.serviceId==='wedding'){
@@ -1152,7 +1277,7 @@ function validateRequiredFields(){
   const missing=[];
 
   if(!$('date').value) missing.push('預約日期');
-  if(!$('hour').value || !$('minute').value) missing.push('開始時間');
+  if(serviceId!=='lesson' && (!$('hour').value || !$('minute').value)) missing.push('開始時間');
   if(!$('name').value.trim()) missing.push('姓名');
   if(!$('phone').value.trim()) missing.push('聯絡手機');
   if(!$('location').value) missing.push('開妝地點');
@@ -1171,6 +1296,7 @@ function validateRequiredFields(){
   if(serviceId==='makeover'){
     if(!$('makeupStyle').value.trim()) missing.push('妝造風格');
     if(!$('makeupPurpose').value.trim()) missing.push('妝髮目的');
+    if(!$('makeoverFollowMakeup').value) missing.push('是否需要跟妝');
     if(!$('accessoryRental').value) missing.push('是否需要租借飾品');
   }
 
@@ -1263,6 +1389,7 @@ async function submitBooking(){
     registrationAccessoryRental:serviceId==='registration' ? $('registrationAccessoryRental').value : '',
     makeupStyle:serviceId==='makeover' ? $('makeupStyle').value.trim() : '',
     makeupPurpose:serviceId==='makeover' ? $('makeupPurpose').value.trim() : '',
+    makeoverFollowMakeup:serviceId==='makeover' ? $('makeoverFollowMakeup').value : '',
     accessoryRental:serviceId==='makeover' ? $('accessoryRental').value : '',
     hasElevator:(serviceId==='wedding' && $('location').value==='到府服務／自選地點') ? $('hasElevator').value : '',
     weddingStyle:serviceId==='wedding' ? $('weddingStyle').value.trim() : '',

@@ -25,7 +25,7 @@ body{padding-bottom:max(28px,env(safe-area-inset-bottom))}
 .empty{margin:40px 16px;text-align:center;color:var(--muted);font-size:13px;line-height:1.7}
 .loading{padding:35px;text-align:center;color:var(--muted)}
 .toast{position:fixed;left:50%;bottom:24px;z-index:99;transform:translateX(-50%) translateY(30px);opacity:0;pointer-events:none;transition:.2s;padding:10px 14px;border-radius:999px;background:#4c3228;color:#fff;font-size:12px;box-shadow:0 8px 24px rgba(0,0,0,.18)}.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
-.modal{position:fixed;inset:0;z-index:100;display:none;align-items:center;justify-content:center;padding:22px;background:rgba(50,32,23,.48);backdrop-filter:blur(3px)}.modal.show{display:flex}.modalCard{width:min(100%,350px);padding:21px;border-radius:22px;background:#fff;text-align:center;box-shadow:0 24px 60px rgba(0,0,0,.2)}.modalCard h3{margin:0 0 8px;font-size:20px}.modalCard p{margin:0;color:var(--muted);font-size:13px;line-height:1.7}.modalActions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:17px}.modalActions button{border:0;border-radius:13px;padding:11px;font-weight:800}.cancel{background:#f4ece7;color:#76584b}.ok{background:var(--brown);color:#fff}
+.modal{position:fixed;inset:0;z-index:100;display:none;align-items:center;justify-content:center;padding:22px;background:rgba(50,32,23,.48);backdrop-filter:blur(3px)}.modal.show{display:flex}.modalCard{width:min(100%,350px);padding:21px;border-radius:22px;background:#fff;text-align:center;box-shadow:0 24px 60px rgba(0,0,0,.2)}.modalCard h3{margin:0 0 8px;font-size:20px}.modalCard p{margin:0;color:var(--muted);font-size:13px;line-height:1.7}.modalActions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin-top:17px}.modalActions button{border:0;border-radius:13px;padding:11px;font-weight:800}.cancel{background:#f4ece7;color:#76584b}.ok{background:var(--brown);color:#fff}
 .vacationBox{padding:4px 12px 7px}.vacationToggle{width:100%;border:1px solid var(--line);border-radius:14px;padding:11px;background:#fff;color:var(--brown);font-weight:850}.vacationPanel{display:none;margin-top:9px;padding:12px;border:1px solid var(--line);border-radius:17px;background:#fff}.vacationPanel.show{display:block}.vacationRow{display:grid;grid-template-columns:1fr 100px;gap:8px}.closedDaysList{margin-top:9px}.closedDay{display:flex;align-items:center;justify-content:space-between;padding:9px 4px;border-top:1px solid #f1e5de;font-size:12px}.closedDay button{border:0;background:#f8e7e2;color:#94493c;border-radius:10px;padding:7px 9px;font-weight:800}
 
 .managerNav{
@@ -34,8 +34,8 @@ body{padding-bottom:max(28px,env(safe-area-inset-bottom))}
   z-index:18;
   display:grid;
   grid-template-columns:1fr 1fr;
-  gap:9px;
-  padding:11px 12px;
+  gap:6px;
+  padding:9px 10px;
   background:rgba(255,248,243,.96);
   backdrop-filter:blur(12px);
   border-bottom:1px solid rgba(234,215,204,.7);
@@ -44,7 +44,7 @@ body{padding-bottom:max(28px,env(safe-area-inset-bottom))}
   min-width:0;
   border:1px solid var(--line);
   border-radius:17px;
-  padding:11px 12px;
+  padding:9px 6px;
   background:#fff;
   color:var(--muted);
   display:flex;
@@ -149,6 +149,24 @@ body{padding-bottom:max(28px,env(safe-area-inset-bottom))}
 .switch{position:relative;flex:0 0 48px;width:48px;height:28px;border:0;border-radius:999px;background:#ddd0c8;transition:.18s}
 .switch::after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;box-shadow:0 2px 5px rgba(0,0,0,.15);transition:.18s}
 .switch.on{background:var(--brown)}.switch.on::after{transform:translateX(20px)}
+
+@media(max-width:520px){
+  .managerNav{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+  .managerNavBtn{padding:10px 3px;gap:0;text-align:center}
+  .managerNavBtn .navIcon,.managerNavBtn small{display:none}
+  .managerNavBtn b{font-size:12px;white-space:nowrap}
+}
+
+.subCardTitle{font-size:16px;font-weight:900;color:var(--brown)}
+.subCardHint{margin:4px 0 12px;color:var(--muted);font-size:10.5px;line-height:1.5}
+.blockTimeRow{display:grid;grid-template-columns:1fr 20px 1fr;gap:7px;align-items:center;margin:8px 0}
+.blockTimeRow span{text-align:center;color:var(--muted)}
+.blockSubmit{width:100%;margin-top:10px}
+.timeBlocksList{margin-top:13px}
+.timeBlockItem{display:flex;align-items:center;gap:8px;padding:10px 2px;border-top:1px solid #f1e5de}
+.timeBlockInfo{min-width:0;flex:1;font-size:11px;line-height:1.5}
+.timeBlockInfo b{display:block;font-size:12px}
+.timeBlockCancel{border:0;border-radius:10px;padding:7px 9px;background:#f8e7e2;color:#94493c;font-weight:800;font-size:10px}
 </style>
 </head>
 <body>
@@ -223,6 +241,22 @@ body{padding-bottom:max(28px,env(safe-area-inset-bottom))}
         <button class="bulkBtn closeDays" onclick="applyVacationBulk('close')">設為休假</button>
         <button class="bulkBtn openDays" onclick="applyVacationBulk('open')">恢復開放</button>
       </div>
+    </div>
+
+    <div class="vacationCard timeBlockCard">
+      <div class="subCardTitle">關閉特定時段</div>
+      <div class="subCardHint">例如臨時有事、外出或不想開放某段時間，可以直接關閉。</div>
+      <div class="blockDateRow">
+        <input id="blockDate" class="control" type="date">
+      </div>
+      <div class="blockTimeRow">
+        <select id="blockStart" class="control"></select>
+        <span>～</span>
+        <select id="blockEnd" class="control"></select>
+      </div>
+      <input id="blockReason" class="control" type="text" placeholder="備註（選填，例如：外出）">
+      <button class="bulkBtn closeDays blockSubmit" onclick="addTimeBlockAdmin()">關閉這個時段</button>
+      <div id="timeBlocksList" class="timeBlocksList"></div>
     </div>
   </section>
 
@@ -417,6 +451,66 @@ let selectedVacationDates=new Set();
 let closedVacationDates=new Set();
 let vacationMonthCache={};
 
+
+function fillBlockTimeOptions(){
+  const options=[];
+  for(let h=0;h<24;h++){
+    for(let m=0;m<60;m+=5){
+      const t=String(h).padStart(2,'0')+':'+String(m).padStart(2,'0');
+      options.push(`<option value="${t}">${t}</option>`);
+    }
+  }
+  $('blockStart').innerHTML=options.join('');
+  $('blockEnd').innerHTML=options.join('');
+  $('blockStart').value='10:00';
+  $('blockEnd').value='14:00';
+}
+
+async function loadTimeBlocksAdmin(){
+  try{
+    const month=monthKey();
+    const r=await jsonp({action:'admin_time_blocks',adminKey,month});
+    const box=$('timeBlocksList');
+    const items=r.items||[];
+    box.innerHTML=items.length?items.map(x=>`<div class="timeBlockItem">
+      <div class="timeBlockInfo"><b>${escapeHtml(x.date.replaceAll('-','/'))}　${escapeHtml(x.start)}–${escapeHtml(x.end)}</b>${x.reason?escapeHtml(x.reason):''}</div>
+      <button class="timeBlockCancel" onclick="cancelTimeBlockAdmin('${x.id}')">恢復</button>
+    </div>`).join(''):'<div class="empty" style="margin:10px 0">本月沒有另外關閉的時段</div>';
+  }catch(e){
+    toast('關閉時段讀取較慢');
+  }
+}
+
+async function addTimeBlockAdmin(){
+  const date=$('blockDate').value;
+  const start=$('blockStart').value;
+  const end=$('blockEnd').value;
+  const reason=$('blockReason').value.trim();
+  if(!date){toast('請先選日期');return}
+  if(!start || !end || end<=start){toast('請確認開始與結束時間');return}
+  try{
+    await fetch(API_URL,{
+      method:'POST',mode:'no-cors',
+      headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},
+      body:new URLSearchParams({action:'admin_time_block_add',adminKey,date,start,end,reason})
+    });
+    toast('已關閉這個時段');
+    setTimeout(loadTimeBlocksAdmin,250);
+  }catch(e){toast('設定失敗')}
+}
+
+async function cancelTimeBlockAdmin(blockId){
+  try{
+    await fetch(API_URL,{
+      method:'POST',mode:'no-cors',
+      headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},
+      body:new URLSearchParams({action:'admin_time_block_cancel',adminKey,blockId})
+    });
+    toast('已恢復這個時段');
+    setTimeout(loadTimeBlocksAdmin,250);
+  }catch(e){toast('恢復失敗')}
+}
+
 function showManagerPage(page){
   managerPage=page;
   document.getElementById('bookingsPage').classList.toggle('hidden',page!=='bookings');
@@ -425,7 +519,7 @@ function showManagerPage(page){
   document.getElementById('navBookings').classList.toggle('active',page==='bookings');
   document.getElementById('navVacation').classList.toggle('active',page==='vacation');
   document.getElementById('navServices').classList.toggle('active',page==='services');
-  if(page==='vacation') loadVacationMonth();
+  if(page==='vacation'){loadVacationMonth();loadTimeBlocksAdmin();}
   if(page==='services') loadServiceSettingsAdmin();
 }
 
@@ -437,6 +531,7 @@ function shiftVacationMonth(delta){
   closedVacationDates=new Set(vacationMonthCache[month]||[]);
   renderVacationCalendar();
   loadVacationMonth();
+  loadTimeBlocksAdmin();
 }
 
 function monthKey(){
@@ -568,6 +663,7 @@ if(adminKey){
   document.getElementById('dashboard').style.display='block';
   load();
 }
+fillBlockTimeOptions();
 </script>
 </body>
 </html>
