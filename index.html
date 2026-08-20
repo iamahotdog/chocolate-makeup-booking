@@ -145,6 +145,61 @@ body.modalOpen{
   touch-action:none;
 }
 
+
+.detailLink{
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  margin-top:7px;
+  border:0;
+  padding:0;
+  background:none;
+  color:var(--brown);
+  font-size:11px;
+  font-weight:800;
+  text-decoration:underline;
+  text-underline-offset:3px;
+}
+.priorityNote{
+  margin:0 16px 14px;
+  padding:13px 14px;
+  border-radius:15px;
+  background:#fff4ee;
+  border:1px solid #e7c9b9;
+  color:#755347;
+  font-size:12px;
+  line-height:1.65;
+}
+.priorityNote b{color:var(--ink)}
+.fieldHint{
+  margin-top:6px;
+  color:var(--muted);
+  font-size:10.8px;
+  line-height:1.6;
+}
+.successSimple{
+  margin:24px 16px;
+  padding:24px 21px;
+  border-radius:23px;
+  background:var(--green);
+  color:var(--greenInk);
+  box-shadow:var(--shadow);
+}
+.successSimple h2{
+  margin:0 0 10px;
+  font-size:24px;
+}
+.successSimple p{
+  margin:8px 0 0;
+  font-size:13px;
+  line-height:1.75;
+}
+.successSimple .photoReq{
+  margin-top:16px;
+  padding-top:15px;
+  border-top:1px solid rgba(45,106,66,.16);
+}
+
 </style>
 </head>
 <body>
@@ -212,7 +267,7 @@ body.modalOpen{
     </div>
     <div class="oaCard" style="margin:12px 0 0;">
       🥨 11:00–15:00，一次4小時（不接受加時）<br>
-      ❗ 原則僅開放假日預約；特殊工作時段可再留言討論<br>
+      ❗ 目前僅開放假日預約；若因職業或個人因素僅能平日／假日晚間，再私訊巧克力討論<br>
       忠孝復興工作室 $3,200<br>
       鶯歌居家工作室 $2,700（有貓🐈，怕貓者勿選）<br>
       2027 年 1 月時段歡迎再詢問 ♡
@@ -255,7 +310,53 @@ body.modalOpen{
   <div class="field"><label>聯絡手機</label><input id="phone" class="control" type="tel" inputmode="numeric" autocomplete="tel" maxlength="10" pattern="[0-9]{10}" placeholder="0912345678"></div>
   <div class="field"><label>在哪裡開妝？</label><select id="location" class="control" onchange="toggleArea()"></select></div>
   <div id="areaField" class="field hidden"><label>到府的大概地區</label><input id="area" class="control" placeholder="例如：中壢區"><div class="helper">詳細地址之後在 LINE 再確認即可。</div></div>
-  <div class="field"><label>有沒有一定要先告訴巧克力的事？ <span style="font-weight:400;color:#9a7c6d">（選填）</span></label><textarea id="note" class="control" rows="3" placeholder="例如：12:00前需要完成、特殊行程安排等"></textarea></div>
+  
+  <div id="makeoverExtra" class="hidden">
+    <div class="field">
+      <label>妝造風格</label>
+      <input id="makeupStyle" class="control" type="text" placeholder="可愛／日系／清新／韓系／亞裔混血…">
+      <div class="fieldHint">可以再多說一點喜歡的感覺；有範例照片會更好，預約送出後直接傳到 LINE 給巧克力就可以 ♡</div>
+    </div>
+
+    <div class="field">
+      <label>妝髮目的</label>
+      <input id="makeupPurpose" class="control" type="text" placeholder="個人拍攝、情侶寫真、參與活動…">
+    </div>
+
+    <div class="field">
+      <label>是否需要租借飾品？</label>
+      <select id="accessoryRental" class="control">
+        <option value="">請選擇</option>
+        <option value="否">不需要</option>
+        <option value="是">需要</option>
+      </select>
+      <button type="button" class="detailLink" onclick="showAccessoryDetails()">查看租借詳情🥨</button>
+    </div>
+  </div>
+
+  <div id="weddingExtra" class="hidden">
+    <div id="elevatorField" class="field hidden">
+      <label>到府地點有電梯嗎？</label>
+      <select id="hasElevator" class="control">
+        <option value="">請選擇</option>
+        <option value="有">有電梯</option>
+        <option value="無">沒有電梯</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label>妝造風格</label>
+      <input id="weddingStyle" class="control" type="text" placeholder="可愛／日系／清新／韓系／亞裔混血…">
+      <div class="fieldHint">可以先簡單描述想要的方向；參考照片之後直接傳 LINE 給巧克力會更清楚 ♡</div>
+    </div>
+
+    <div class="field">
+      <label>婚紗拍攝地點</label>
+      <input id="weddingShootLocation" class="control" type="text" placeholder="例如：陽明山、棚拍工作室、淡水…">
+    </div>
+  </div>
+
+<div class="field"><label>有沒有一定要先告訴巧克力的事？ <span style="font-weight:400;color:#9a7c6d">（選填）</span></label><textarea id="note" class="control" rows="3" placeholder="例如：12:00前需要完成、特殊行程安排等"></textarea></div>
 
   <div class="oaCard"><b>照片先不用急著準備 ♡</b><br>預約完成後，再回 LINE 傳喜歡的妝感、髮型與參考照片，我們再一起慢慢討論。</div>
 
@@ -392,6 +493,15 @@ async function connectLineForBooking(){
       primaryText:'知道了'
     });
   }
+}
+
+
+function showAccessoryDetails(){
+  showBrandModal({
+    title:'飾品租借說明🥨',
+    text:'租借費用 $400 ＋ 押金 $200\n當日共收取 $600。\n\n飾品使用完畢後請寄回；確認無缺少、無損害後，會退回押金 $200 ♡',
+    primaryText:'知道了'
+  });
 }
 
 async function initLiff(){
@@ -567,11 +677,19 @@ function openForm(id){
   $('location').innerHTML=id==='makeover'
     ? '<option value="">請選擇</option><option>忠孝復興工作室</option><option>鶯歌工作室</option><option>到府服務</option>'
     : '<option value="">請選擇</option><option>忠孝復興工作室</option><option>到府服務</option>';
+  $('makeoverExtra').classList.toggle('hidden',id!=='makeover');
+  $('weddingExtra').classList.toggle('hidden',id!=='wedding');
   toggleArea();scheduleCheck();window.scrollTo({top:0,behavior:'smooth'});
 }
 function backToServices(){$('formPage').style.display='none';$('services').style.display='block';window.scrollTo({top:0,behavior:'smooth'})}
 function step(id,d){let e=$(id),min=id==='sets'?1:0;e.value=Math.max(min,parseInt(e.value||0)+d);scheduleCheck()}
-function toggleArea(){$('areaField').classList.toggle('hidden',$('location').value!=='到府服務')}
+function toggleArea(){
+  const isHome=$('location').value==='到府服務';
+  $('areaField').classList.toggle('hidden',!isHome);
+  if($('elevatorField')){
+    $('elevatorField').classList.toggle('hidden',!(serviceId==='wedding' && isHome));
+  }
+}
 function selectedTime(){return $('hour').value&&$('minute').value?$('hour').value+':'+$('minute').value:''}
 function payload(){return{serviceId,date:$('date').value,time:selectedTime(),femaleCount:$('female').value,maleCount:$('male').value,setCount:$('sets').value}}
 function notice(cls,msg){$('availability').className='notice'+(cls?' '+cls:'');$('availability').textContent=msg}
@@ -607,21 +725,33 @@ function makeRequestId(){
 }
 
 
+function displayDateTime(date,time){
+  const d=String(date||'').slice(0,10).replace(/-/g,'/');
+  const t=String(time||'').slice(0,5);
+  return (d && t) ? d+' '+t : (d || t);
+}
+
 async function sendBookingSummaryToOfficialAccount(r,p){
   if(!window.liff || !liff.isInClient()) return false;
 
   try{
-    // LINE MINI App 的 chat_message.write 可能需要使用者在實際使用時授權。
     if(liff.permission && liff.permission.query){
       const permission = await liff.permission.query('chat_message.write');
-
-      if(
-        permission &&
-        permission.state === 'prompt' &&
-        liff.permission.requestAll
-      ){
+      if(permission && permission.state === 'prompt' && liff.permission.requestAll){
         await liff.permission.requestAll();
       }
+    }
+
+    let extra='';
+    if(p.serviceId==='makeover'){
+      if(p.makeupStyle) extra+='妝造風格：'+p.makeupStyle+'\n';
+      if(p.makeupPurpose) extra+='妝髮目的：'+p.makeupPurpose+'\n';
+      if(p.accessoryRental) extra+='租借飾品：'+p.accessoryRental+'\n';
+    }
+    if(p.serviceId==='wedding'){
+      if(p.hasElevator) extra+='電梯：'+p.hasElevator+'\n';
+      if(p.weddingStyle) extra+='妝造風格：'+p.weddingStyle+'\n';
+      if(p.weddingShootLocation) extra+='婚紗拍攝地點：'+p.weddingShootLocation+'\n';
     }
 
     await liff.sendMessages([
@@ -630,13 +760,13 @@ async function sendBookingSummaryToOfficialAccount(r,p){
         text:
           '🥨 預約資料已填寫完成\n'+
           '服務：'+r.service+'\n'+
-          '日期：'+r.date+'\n'+
-          '時間：'+r.time+'\n'+
+          '預約時間：'+displayDateTime(r.date,r.time)+'\n'+
           '姓名：'+p.name+'\n'+
           '手機：'+p.phone+'\n'+
           '開妝地點：'+p.locationType+
           (p.area ? '（'+p.area+'）' : '')+'\n'+
-          (p.note ? '補充：'+p.note+'\n' : '')+
+          extra+
+          (p.note ? '其他補充：'+p.note+'\n' : '')+
           '\n※目前僅為預定時間，完成訂金支付後才正式保留時段。'
       }
     ]);
@@ -683,6 +813,12 @@ async function submitBooking(){
     locationType:$('location').value,
     area:$('area').value.trim(),
     note:$('note').value.trim(),
+    makeupStyle:serviceId==='makeover' ? $('makeupStyle').value.trim() : '',
+    makeupPurpose:serviceId==='makeover' ? $('makeupPurpose').value.trim() : '',
+    accessoryRental:serviceId==='makeover' ? $('accessoryRental').value : '',
+    hasElevator:(serviceId==='wedding' && $('location').value==='到府服務') ? $('hasElevator').value : '',
+    weddingStyle:serviceId==='wedding' ? $('weddingStyle').value.trim() : '',
+    weddingShootLocation:serviceId==='wedding' ? $('weddingShootLocation').value.trim() : '',
     idToken:lineIdToken,
     accessToken:lineAccessToken
   });
@@ -690,6 +826,7 @@ async function submitBooking(){
   if(!p.name||!p.phone||!p.locationType){notice('bad','還差姓名、手機或開妝地點沒有填完喔。');return}
   if(!/^09\d{8}$/.test(p.phone)){notice('bad','手機號碼請輸入 10 碼，例如 0912345678 ♡');return}
   if(p.locationType==='到府服務'&&!p.area){notice('bad','到府服務先告訴巧克力大概在哪一區就好。');return}
+  if(serviceId==='wedding' && p.locationType==='到府服務' && !p.hasElevator){notice('bad','到府服務再幫我選一下現場有沒有電梯 ♡');return}
 
   const b=$('submit');
   b.disabled=true;
@@ -707,13 +844,14 @@ async function submitBooking(){
     const r=await pollStatus(p.requestId);
     const sentToChat=lineReady ? await sendBookingSummaryToOfficialAccount(r,p) : false;
     $('formPage').style.display='none';
-    $('result').innerHTML=`<section class="success">
-      <h2>時間先幫你登記好囉 ✓</h2>
-      <p><b>${r.service}</b><br>${r.date}　${r.time}<br>預估服務到 ${r.serviceEnd}</p>
-      <p style="font-size:12px">預約編號：${r.id}</p>
-      <div class="next">
-        <b>目前仍是「預定時間」♡</b><br>
-        ${sentToChat?'預約資料已自動回傳到 LINE 官方帳號。':'完成訂金支付後，巧克力才會正式為你保留這個時段。'} 接著可以直接回 LINE 傳妝感、髮型或參考照片。
+    $('result').innerHTML=`<section class="successSimple">
+      <h2>預約成功 ✓</h2>
+      <p><b>時間先幫您登記好囉！！</b><br>${displayDateTime(r.date,r.time)}</p>
+      <div class="photoReq">
+        <p><b>接下來再麻煩您傳給巧克力：</b><br>
+        ① 1 張面光素顏照<br>
+        ② 2 張能清楚看見五官的生活照</p>
+        <p>妝感、髮型或其他參考照片，也可以直接回到 LINE 一起傳給我 ♡</p>
       </div>
     </section>`;
     window.scrollTo({top:0,behavior:'smooth'});
