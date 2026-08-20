@@ -253,6 +253,82 @@ body.modalOpen{
   color:var(--ink);
 }
 
+
+/* v18 — success hierarchy */
+.successWarm{
+  margin:22px 15px;
+  padding:20px;
+  border:1px solid #ead7cc;
+  border-radius:23px;
+  background:#fffaf6;
+  color:var(--ink);
+  box-shadow:var(--shadow);
+}
+.successHero{
+  padding:3px 3px 18px;
+}
+.successHero h2{
+  margin:0 0 12px;
+  font-size:24px;
+  line-height:1.35;
+  letter-spacing:.02em;
+}
+.successHero p{
+  margin:0;
+  color:#8b6d60;
+  font-size:15px;
+  line-height:1.65;
+  font-weight:400;
+}
+.successSection{
+  margin-top:14px;
+  border:1px solid #ead7cc;
+  border-radius:18px;
+  overflow:hidden;
+  background:#fff;
+}
+.successSectionTitle{
+  padding:10px 14px;
+  background:#8a5238;
+  color:#fff;
+  font-size:15px;
+  line-height:1.45;
+  font-weight:800;
+  letter-spacing:.02em;
+}
+.successSectionBody{
+  padding:14px 15px 15px;
+  color:#684b3f;
+  font-size:13.5px;
+  line-height:1.75;
+}
+.successSectionBody ol{
+  margin:0;
+  padding-left:22px;
+}
+.successSectionBody li{
+  margin:5px 0;
+}
+.successSectionBody p{
+  margin:0;
+}
+.successSectionBody p + p{
+  margin-top:10px;
+}
+.depositEmphasis{
+  padding-top:10px;
+  border-top:1px dashed #dfc5b7;
+  font-weight:700;
+  color:#5d392a;
+}
+.accessoryDetail{
+  margin:0;
+  text-align:left;
+  color:#8a6b5f;
+  font-size:14px;
+  line-height:1.75;
+}
+
 </style>
 </head>
 <body>
@@ -544,7 +620,7 @@ async function connectLineForBooking(){
 function showAccessoryDetails(){
   showBrandModal({
     title:'飾品租借說明🥨',
-    text:'租借費用：$400。\n押金：$200。\n\n當日共收取 $600。\n\n飾品使用完畢後，請協助寄回。\n確認無缺少、無損害後，將退回押金 $200。',
+    html:'<div class="accessoryDetail">∷ 租借費用 $400 與押金 $200<br>當日共收取 $600<br>飾品使用完畢後，請協助寄回。確認無缺少、無損害後，將退回押金 $200。</div>',
     primaryText:'知道了'
   });
 }
@@ -915,22 +991,28 @@ async function submitBooking(){
     const sentToChat=lineReady ? await sendBookingSummaryToOfficialAccount(r,p) : false;
     $('formPage').style.display='none';
     $('result').innerHTML=`<section class="successWarm">
-      <h2>預約資料已送出 ✓</h2>
-      <p class="timeLine">時間先幫您登記好囉！！<br>${displayDateTime(r.date,r.time)}</p>
-
-      <div class="nextSteps">
-        <h3>接下來再麻煩您傳給巧克力 ♡</h3>
-        <ol>
-          <li>1 張面光、清楚的素顏照。</li>
-          <li>2 張能清楚看見五官的生活照。</li>
-          <li>喜歡的妝感、髮型或參考照片；風格細節會再透過 LINE 一起討論確認。</li>
-        </ol>
+      <div class="successHero">
+        <h2>期待巧克力施魔法的日子 ♡</h2>
+        <p>時間先幫您預約好囉<br>${displayDateTime(r.date,r.time)}</p>
       </div>
 
-      <div class="depositRule">
-        <b>檔期保留方式</b><br>
-        若同一時段有不同人詢問，將以 <b>先完成訂金支付者</b> 為優先預約成功的對象。<br><br>
-        <b>記得要完成訂金支付，才會是真正的預約成功喔！！！</b>
+      <div class="successSection">
+        <div class="successSectionTitle">接下來再麻煩您傳給巧克力 ♡</div>
+        <div class="successSectionBody">
+          <ol>
+            <li>1 張面光、清楚的素顏照。</li>
+            <li>2 張能清楚看見五官的生活照。</li>
+            <li>喜歡的妝感、髮型或參考照片，風格細節會再透過 LINE 一起討論確認。</li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="successSection">
+        <div class="successSectionTitle">檔期保留方式</div>
+        <div class="successSectionBody">
+          <p>若同一時段有不同人詢問，將以 <b>先完成訂金支付者</b> 為優先預約成功的對象。</p>
+          <p class="depositEmphasis">記得要完成訂金支付，才會是真正的預約成功喔 ♡</p>
+        </div>
       </div>
     </section>`;
     window.scrollTo({top:0,behavior:'smooth'});
