@@ -1257,14 +1257,32 @@ function displayDateTime(date,time){
 }
 
 async function pollStatus(requestId){
-  const waits=[40,70,100,140,180,240,320,450,650,900,1200];
+  // Apps Script 建立預約目前約 4～6 秒。
+  // 不再用數十毫秒高頻輪詢，避免自己製造大量 doGet 塞車。
+  const waits=[800,1200,1800,2500,3500,4500];
+
+  let elapsed=0;
   for(const wait of waits){
     await new Promise(r=>setTimeout(r,wait));
+    elapsed+=wait;
+
     const s=await jsonp({action:'status',requestId});
-    if(s.status==='success') return s;
-    if(s.status==='error') throw new Error(s.message||'預約建立失敗');
+
+    if(s.status==='success'){
+      if(s.perf) console.log('booking performance',s.perf);
+      return s;
+    }
+
+    if(s.status==='error'){
+      throw new Error(s.message||'預約建立失敗');
+    }
+
+    if(elapsed>=4300 && elapsed-wait<4300){
+      notice('','預約還在確認中，請先不要重複送出 ♡');
+    }
   }
-  throw new Error('預約處理時間較久，請稍後重新確認。');
+
+  throw new Error('預約仍在處理中，請先不要重複送出；若稍後仍未看到完成畫面，請重新開啟預約頁確認。');
 }
 
 
