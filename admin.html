@@ -181,6 +181,19 @@ body{padding-bottom:max(28px,env(safe-area-inset-bottom))}
   appearance:none;
 }
 #blockDate::-webkit-date-and-time-value{text-align:left}
+
+.blockTimeInput{
+  width:100%;
+  max-width:100%;
+  min-width:0;
+  box-sizing:border-box;
+  -webkit-appearance:none;
+  appearance:none;
+  font-variant-numeric:tabular-nums;
+}
+.blockTimeInput::-webkit-date-and-time-value{
+  text-align:left;
+}
 </style>
 </head>
 <body>
@@ -264,9 +277,9 @@ body{padding-bottom:max(28px,env(safe-area-inset-bottom))}
         <input id="blockDate" class="control" type="date">
       </div>
       <div class="blockTimeRow">
-        <select id="blockStart" class="control"></select>
+        <input id="blockStart" class="control blockTimeInput" type="time" step="300" value="10:00">
         <span>～</span>
-        <select id="blockEnd" class="control"></select>
+        <input id="blockEnd" class="control blockTimeInput" type="time" step="300" value="14:00">
       </div>
       <input id="blockReason" class="control" type="text" placeholder="備註（選填，例如：外出）">
       <button class="bulkBtn closeDays blockSubmit" onclick="addTimeBlockAdmin()">關閉這個時段</button>
@@ -293,6 +306,7 @@ body{padding-bottom:max(28px,env(safe-area-inset-bottom))}
 
 <script>
 const API_URL='https://script.google.com/macros/s/AKfycbxi5rwWSixQ7qAH39WSwfI6EQVkUgKRrAkVR7btnLeq_8LaOWFtmrhr0QM7FkNrDQHPSA/exec';
+const $=id=>document.getElementById(id);
 let adminKey=sessionStorage.getItem('choco_admin_key')||'';
 let filter='pending';
 let adminLoadSeq=0;
@@ -472,19 +486,6 @@ let closedVacationDates=new Set();
 let vacationMonthCache={};
 
 
-function fillBlockTimeOptions(){
-  const options=[];
-  for(let h=0;h<24;h++){
-    for(let m=0;m<60;m+=5){
-      const t=String(h).padStart(2,'0')+':'+String(m).padStart(2,'0');
-      options.push(`<option value="${t}">${t}</option>`);
-    }
-  }
-  $('blockStart').innerHTML=options.join('');
-  $('blockEnd').innerHTML=options.join('');
-  $('blockStart').value='10:00';
-  $('blockEnd').value='14:00';
-}
 
 
 function renderTimeBlocks(items){
@@ -685,7 +686,6 @@ if(adminKey){
   document.getElementById('dashboard').style.display='block';
   load();
 }
-fillBlockTimeOptions();
 </script>
 </body>
 </html>

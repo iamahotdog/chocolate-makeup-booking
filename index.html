@@ -342,6 +342,41 @@ body.modalOpen{
 .formLineBadge{display:inline-flex;margin-top:9px;padding:5px 9px;border-radius:999px;background:#f4ece7;color:#7b5b4e;font-size:9.8px;font-weight:750}
 .formLineBadge.ok{background:#edf7f0;color:#2d6a42}
 .formLineBadge.bad{background:#fff0ed;color:#a44338}
+
+.bookingSuccessToast{
+  position:fixed;
+  left:50%;
+  top:calc(14px + env(safe-area-inset-top));
+  z-index:999;
+  width:calc(100% - 32px);
+  max-width:398px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  padding:12px 14px;
+  border:1px solid #dfc4b6;
+  border-radius:15px;
+  background:#fff8f3;
+  color:#6d4230;
+  font-size:12.5px;
+  font-weight:800;
+  box-shadow:0 10px 28px rgba(75,44,30,.16);
+  opacity:0;
+  transform:translate(-50%,-18px);
+  pointer-events:none;
+  transition:opacity .2s ease,transform .2s ease;
+}
+.bookingSuccessToast.show{
+  opacity:1;
+  transform:translate(-50%,0);
+}
+.bookingSuccessDot{
+  width:22px;height:22px;border-radius:50%;
+  display:grid;place-items:center;
+  background:#ead9cf;color:#6d4230;
+}
+
 </style>
 </head>
 <body>
@@ -545,6 +580,12 @@ body.modalOpen{
 </section>
 
 <div id="result"></div>
+
+<div id="bookingSuccessToast" class="bookingSuccessToast" role="status" aria-live="polite">
+  <span class="bookingSuccessDot">✓</span>
+  <span>預約資料已成功送出 ♡</span>
+</div>
+
 </main>
 
 <div id="brandModal" class="brandModal" role="dialog" aria-modal="true" aria-labelledby="brandModalTitle">
@@ -1276,6 +1317,13 @@ function validateRequiredFields(){
 
 
 function finalizeBookingSuccess(r,p){
+  const successToast=$('bookingSuccessToast');
+  if(successToast){
+    successToast.classList.add('show');
+    clearTimeout(finalizeBookingSuccess._toastTimer);
+    finalizeBookingSuccess._toastTimer=setTimeout(()=>successToast.classList.remove('show'),4200);
+  }
+
   $('formPage').style.display='none';
   $('result').innerHTML=`<section class="successWarm">
     <div class="successHero">
@@ -1363,22 +1411,15 @@ async function submitBooking(){
   notice('','正在送出資料…');
 
   try{
-    await postForm(p);
+    // POST 發出去後立即開始查詢狀態，不需要等待 LINE Push 完成。
+    postForm(p).catch(err=>console.warn('booking POST failed',err));
 
     const r=await pollStatus(p.requestId);
 
     // 後端確認成功後，先切換成功畫面，再處理任何 LINE 對話。
     finalizeBookingSuccess(r,p);
 
-    // LINE 摘要只做背景補送，不影響預約成功。
-    if(lineReady && window.liff && liff.isInClient()){
-      Promise.resolve()
-        .then(()=>sendBookingSummaryToOfficialAccount(r,p))
-        .then(sent=>console.log('LINE booking summary sent:',sent))
-        .catch(err=>console.warn('LINE booking summary failed:',err));
-    }else{
-      console.warn('LINE booking summary skipped: not in LINE client or LINE identity unavailable');
-    }
+
 
   }catch(e){
     notice('bad',e.message||'預約送出失敗，請再試一次。');
