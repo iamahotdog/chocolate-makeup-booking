@@ -1257,14 +1257,12 @@ function displayDateTime(date,time){
 }
 
 async function pollStatus(requestId){
-  // Apps Script 建立預約目前約 4～6 秒。
-  // 不再用數十毫秒高頻輪詢，避免自己製造大量 doGet 塞車。
-  const waits=[800,1200,1800,2500,3500,4500];
+  // POST 已完成後才進來；正常情況第一查就會拿到 success / error。
+  // 只保留少量重試，避免 ScriptProperties 極短暫同步延遲。
+  const waits=[0,500,1000,1800];
 
-  let elapsed=0;
   for(const wait of waits){
-    await new Promise(r=>setTimeout(r,wait));
-    elapsed+=wait;
+    if(wait) await new Promise(r=>setTimeout(r,wait));
 
     const s=await jsonp({action:'status',requestId});
 
@@ -1276,13 +1274,9 @@ async function pollStatus(requestId){
     if(s.status==='error'){
       throw new Error(s.message||'預約建立失敗');
     }
-
-    if(elapsed>=4300 && elapsed-wait<4300){
-      notice('','預約還在確認中，請先不要重複送出 ♡');
-    }
   }
 
-  throw new Error('預約仍在處理中，請先不要重複送出；若稍後仍未看到完成畫面，請重新開啟預約頁確認。');
+  throw new Error('預約資料已送出，但完成狀態確認較慢。請先不要重複送出，稍後重新開啟頁面即可確認。');
 }
 
 
@@ -1429,9 +1423,11 @@ async function submitBooking(){
   notice('','正在送出資料…');
 
   try{
-    // POST 發出去後立即開始查詢狀態，不需要等待 LINE Push 完成。
-    postForm(p).catch(err=>console.warn('booking POST failed',err));
+    // 先讓 Apps Script 完整建立預約；POST 完成後再查一次結果。
+    // 避免建立過程中同時產生大量 doGet，反而拖慢 Apps Script。
+    await postForm(p);
 
+    notice('','預約資料已送出，正在完成最後確認…');
     const r=await pollStatus(p.requestId);
 
     // 後端確認成功後，先切換成功畫面，再處理任何 LINE 對話。
