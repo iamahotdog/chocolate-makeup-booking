@@ -599,7 +599,7 @@ body.modalOpen{
 <script>
 const LIFF_ID = '2011180527-2I2I2ztI';
 const API_URL = 'https://script.google.com/macros/s/AKfycbxi5rwWSixQ7qAH39WSwfI6EQVkUgKRrAkVR7btnLeq_8LaOWFtmrhr0QM7FkNrDQHPSA/exec';
-let serviceId='',timer=null,lineReady=false,lineIdToken='',lineAccessToken='',suppressDateModal=false;
+let serviceId='',timer=null,lineReady=false,lineIdToken='',lineAccessToken='',suppressDateModal=false,liffInitPromise=null;
 const names={registration:'登記妝髮',wedding:'拍婚紗專區',makeover:'妝髮換頭魔法',lesson:'1 對 1 美妝教學'};
 const $=id=>document.getElementById(id);
 
@@ -675,10 +675,32 @@ async function refreshLineIdentity(){
   }
 }
 
+async function ensureLineReadyForSubmit(){
+  try{
+    await initLiff();
+
+    if(!window.liff || !liff.isLoggedIn()){
+      return false;
+    }
+
+    const ok=await refreshLineIdentity();
+
+    console.log('LINE_READY_CHECK',{
+      loggedIn:liff.isLoggedIn(),
+      hasIdToken:!!lineIdToken,
+      hasAccessToken:!!lineAccessToken,
+      ready:ok
+    });
+
+    return ok;
+  }catch(e){
+    console.error('ensureLineReadyForSubmit',e);
+    return false;
+  }
+}
+
 async function connectLineForBooking(){
-  // 已進入預約頁後不再重新導向 LINE Login。
-  // 若初始化階段沒有取得 token，請使用者從 OA 重新開啟即可。
-  const ok=!!window.liff && liff.isLoggedIn() && !!(lineIdToken || lineAccessToken);
+  const ok=await ensureLineReadyForSubmit();
 
   if(ok){
     showBrandModal({
@@ -698,26 +720,35 @@ async function connectLineForBooking(){
 
 
 async function initLiff(){
-  try{
-    await liff.init({liffId:LIFF_ID});
+  if(liffInitPromise) return liffInitPromise;
 
-    if(!liff.isLoggedIn()){
-      // Published MINI App：從 OA 打開時應直接進 LINE 登入流程。
-      liff.login({redirectUri:location.href});
-      return;
+  liffInitPromise=(async()=>{
+    try{
+      if(!window.liff) throw new Error('LIFF SDK 尚未載入');
+
+      await liff.init({liffId:LIFF_ID});
+
+      if(!liff.isLoggedIn()){
+        // 只允許初次開啟頁面時啟動 LINE Login。
+        liff.login({redirectUri:location.href});
+        return false;
+      }
+
+      const ok=await refreshLineIdentity();
+
+      $('lineState').className='lineState hidden';
+      $('lineState').textContent='';
+      return ok;
+    }catch(e){
+      console.error('LIFF init failed',e);
+      lineReady=false;
+      $('lineState').className='lineState hidden';
+      $('lineState').textContent='';
+      return false;
     }
+  })();
 
-    await refreshLineIdentity();
-
-    // 首頁不顯示任何 LINE 技術狀態。
-    $('lineState').className='lineState hidden';
-    $('lineState').textContent='';
-  }catch(e){
-    console.error('LIFF init failed',e);
-    lineReady=false;
-    $('lineState').className='lineState hidden';
-    $('lineState').textContent='';
-  }
+  return liffInitPromise;
 }
 
 function initForm(){
@@ -1350,12 +1381,9 @@ function finalizeBookingSuccess(r,p){
 async function submitBooking(){
   if(!validateRequiredFields()) return;
 
-  // 送出時不再重新執行 liff.login() 或 refreshLineIdentity()。
-  // 使用頁面初始化時已取得的 LINE token，避免在 MINI App 內再次登入造成 400。
-  const hasLineSession =
-    !!window.liff &&
-    liff.isLoggedIn() &&
-    !!(lineIdToken || lineAccessToken);
+  // 等待 LIFF 初始化完成，並安全重新讀取目前 session token。
+  // 不會呼叫 liff.login()，所以不會在送出時發生 redirect / 400。
+  const hasLineSession=await ensureLineReadyForSubmit();
 
   if(!hasLineSession){
     console.warn('BOOKING_SUBMIT_STOP: LINE session unavailable',{
@@ -1366,8 +1394,8 @@ async function submitBooking(){
     });
 
     showBrandModal({
-      title:'LINE 連線暫時中斷了 ♡',
-      text:'請關閉這個頁面，再從巧克力的 LINE 官方帳號重新開啟預約頁後送出。',
+      title:'LINE 連線還沒準備好 ♡',
+      text:'請先關閉這個頁面，再從巧克力的 LINE 官方帳號重新開啟預約頁後送出。',
       primaryText:'知道了'
     });
     return;
