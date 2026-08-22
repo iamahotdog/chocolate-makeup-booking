@@ -419,7 +419,7 @@ body.modalOpen{
     <div class="serviceText">
       <h2>妝髮換頭魔法</h2>
       <p>約會、參加婚宴、活動、拍攝等單次妝髮。</p>
-      <span class="meta">每人目前約2.5小時</span>
+      <span class="meta">女生約2.5小時／男生約1小時</span>
     </div>
     <button class="bookBtn" onclick="openForm('makeover')">預約</button>
   </article>
@@ -475,7 +475,7 @@ body.modalOpen{
 
   <div class="field"><label class="requiredLabel">怎麼稱呼你？</label><input id="name" class="control" autocomplete="name" placeholder="姓名" required></div>
   <div class="field"><label class="requiredLabel">聯絡手機</label><input id="phone" class="control" type="tel" inputmode="numeric" autocomplete="tel" maxlength="10" pattern="[0-9]{10}" placeholder="0912345678" required><div class="fieldHint">主要以 LINE 訊息聯繫為主，非必要不會使用電話聯繫</div></div>
-  <div class="field"><label class="requiredLabel">在哪裡開妝？</label><select id="location" class="control" onchange="toggleArea()" required></select></div>
+  <div class="field"><label id="locationLabel" class="requiredLabel">在哪裡開妝？</label><select id="location" class="control" onchange="toggleArea()" required></select></div>
   <div id="areaField" class="field hidden"><label class="requiredLabel">開妝詳細地點</label><input id="area" class="control" placeholder="例：臺北市信義區○○路／臺北車站附近飯店" required><div class="helper">請填寫詳細地址或附近地標，以便確認交通距離與報價 ♡</div></div>
   
   
@@ -502,7 +502,7 @@ body.modalOpen{
         <option value="需要">需要</option>
         <option value="不需要">不需要</option>
       </select>
-      <div class="fieldHint">跟妝費用為 $600／小時。</div>
+      
     </div>
 
     <div class="field">
@@ -534,7 +534,7 @@ body.modalOpen{
         <option value="需要">需要</option>
         <option value="不需要">不需要</option>
       </select>
-      <div class="fieldHint">跟妝費用為 $600／小時。</div>
+      
     </div>
 
     <div class="field">
@@ -569,9 +569,9 @@ body.modalOpen{
     </div>
   </div>
 
-<div class="field"><label>有沒有一定要先告訴巧克力的事？ <span style="font-weight:400;color:#9a7c6d">（選填）</span></label><textarea id="note" class="control" rows="3" placeholder="例如：12:00前需要完成、特殊行程安排等"></textarea></div>
+<div id="noteField" class="field"><label>有沒有一定要先告訴巧克力的事？ <span style="font-weight:400;color:#9a7c6d">（選填）</span></label><textarea id="note" class="control" rows="3" placeholder="例如：12:00前需要完成、特殊行程安排等"></textarea></div>
 
-  <div class="oaCard"><b>照片先不用急著準備 ♡</b><br>預約完成後，再回 LINE 傳喜歡的妝感、髮型與參考照片，我們再一起慢慢討論。</div>
+  <div class="oaCard" id="photoHintBlock"><b>照片先不用急著準備 ♡</b><br>預約完成後，再回 LINE 傳喜歡的妝感、髮型與參考照片，我們再一起慢慢討論。</div>
 
   <button id="submit" class="submit" onclick="submitBooking()">先預定這個時間 ✦</button>
   <div class="helper" style="text-align:center;margin-top:10px">此步驟不代表正式保留；完成訂金支付後才會鎖定檔期。</div>
@@ -980,6 +980,9 @@ function openForm(id){
   $('makeoverExtra').classList.toggle('hidden',id!=='makeover');
   $('weddingExtra').classList.toggle('hidden',id!=='wedding');
   $('timeField').classList.toggle('hidden',id==='lesson');
+  $('locationLabel').textContent=id==='lesson'?'在哪裡學習？':'在哪裡開妝？';
+  if($('noteField')) $('noteField').classList.toggle('hidden',id==='lesson');
+  if($('photoHintBlock')) $('photoHintBlock').classList.toggle('hidden',id==='lesson');
   if(id==='lesson'){
     $('hour').value='11';
     $('minute').value='00';
