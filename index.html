@@ -1372,6 +1372,13 @@ function finalizeBookingSuccess(r,p){
       <p>時間先幫您登記好囉<br>${displayDateTime(r.date,r.time)}</p>
     </div>
 
+    ${p.serviceId==='lesson' ? `
+    <div class="successSection">
+      <div class="successSectionTitle">接下來的流程 ♡</div>
+      <div class="successSectionBody">
+        <p>接下來巧克力會先跟你確認預約時間及地點，再收到訂金後會傳課前問答給你🥨</p>
+      </div>
+    </div>` : `
     <div class="successSection">
       <div class="successSectionTitle">接下來再麻煩您傳給巧克力 ♡</div>
       <div class="successSectionBody">
@@ -1381,7 +1388,7 @@ function finalizeBookingSuccess(r,p){
           <li>喜歡的妝感、髮型或參考照片，風格細節會再透過 LINE 一起討論確認。</li>
         </ol>
       </div>
-    </div>
+    </div>`}
 
     <div class="successSection">
       <div class="successSectionTitle">檔期保留方式</div>
