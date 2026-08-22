@@ -676,47 +676,25 @@ async function refreshLineIdentity(){
 }
 
 async function connectLineForBooking(){
-  try{
-    if(!window.liff){
-      showBrandModal({
-        title:'LINE 連線暫時沒有成功',
-        text:'請從巧克力的 LINE 官方帳號重新開啟預約頁 ♡',
-        primaryText:'知道了'
-      });
-      return;
-    }
+  // 已進入預約頁後不再重新導向 LINE Login。
+  // 若初始化階段沒有取得 token，請使用者從 OA 重新開啟即可。
+  const ok=!!window.liff && liff.isLoggedIn() && !!(lineIdToken || lineAccessToken);
 
-    if(!liff.isLoggedIn()){
-      liff.login({redirectUri:location.href});
-      return;
-    }
-
-    const ok = await refreshLineIdentity();
-
-    if(ok){
-      // 連線成功後不額外顯示技術字眼，直接讓使用者再按一次送出。
-      showBrandModal({
-        title:'LINE 已經準備好囉 ♡',
-        text:'可以繼續送出預約了。',
-        primaryText:'繼續預約'
-      });
-    }else{
-      showBrandModal({
-        title:'還差一點點就連上 LINE 了',
-        text:'請關閉這個頁面，再從巧克力的 LINE 官方帳號重新開啟一次預約 ♡',
-        primaryText:'知道了'
-      });
-    }
-  }catch(e){
-    console.error(e);
+  if(ok){
     showBrandModal({
-      title:'LINE 連線暫時沒有成功',
-      text:'請從巧克力的 LINE 官方帳號重新開啟預約頁 ♡',
-      primaryText:'知道了'
+      title:'LINE 已經準備好囉 ♡',
+      text:'可以繼續送出預約了。',
+      primaryText:'繼續預約'
     });
+    return;
   }
-}
 
+  showBrandModal({
+    title:'LINE 連線暫時中斷了 ♡',
+    text:'請關閉這個頁面，再從巧克力的 LINE 官方帳號重新開啟預約頁。',
+    primaryText:'知道了'
+  });
+}
 
 
 async function initLiff(){
@@ -1372,23 +1350,27 @@ function finalizeBookingSuccess(r,p){
 async function submitBooking(){
   if(!validateRequiredFields()) return;
 
-  // 正式 Published LIFF：送出前重新確認 LINE 身分。
-  if(!lineReady){
-    const refreshed=await refreshLineIdentity();
+  // 送出時不再重新執行 liff.login() 或 refreshLineIdentity()。
+  // 使用頁面初始化時已取得的 LINE token，避免在 MINI App 內再次登入造成 400。
+  const hasLineSession =
+    !!window.liff &&
+    liff.isLoggedIn() &&
+    !!(lineIdToken || lineAccessToken);
 
-    if(!refreshed){
-      if(window.liff && !liff.isLoggedIn()){
-        liff.login({redirectUri:location.href});
-        return;
-      }
+  if(!hasLineSession){
+    console.warn('BOOKING_SUBMIT_STOP: LINE session unavailable',{
+      hasLiff:!!window.liff,
+      loggedIn:!!(window.liff && liff.isLoggedIn()),
+      hasIdToken:!!lineIdToken,
+      hasAccessToken:!!lineAccessToken
+    });
 
-      showBrandModal({
-        title:'送出前先連一下 LINE ♡',
-        text:'請從巧克力的 LINE 官方帳號重新開啟預約頁，再送出預約。',
-        primaryText:'知道了'
-      });
-      return;
-    }
+    showBrandModal({
+      title:'LINE 連線暫時中斷了 ♡',
+      text:'請關閉這個頁面，再從巧克力的 LINE 官方帳號重新開啟預約頁後送出。',
+      primaryText:'知道了'
+    });
+    return;
   }
 
   const p=payload();
@@ -1415,30 +1397,57 @@ async function submitBooking(){
     accessToken:lineAccessToken
   });
 
-  if(!p.name||!p.phone||!p.locationType){notice('bad','還差姓名、手機或開妝地點沒有填完喔。');return}
-  if(!/^09\d{8}$/.test(p.phone)){notice('bad','手機號碼請輸入 10 碼，例如 0912345678 ♡');return}
-  if(p.locationType==='到府服務／自選地點'&&!p.area){notice('bad','請填寫開妝詳細地址或附近地標，以便確認交通距離與報價 ♡');return}
-  if(serviceId==='wedding' && p.locationType==='到府服務／自選地點' && !p.hasElevator){notice('bad','到府服務再幫我選一下現場有沒有電梯 ♡');return}
+  if(!p.name||!p.phone||!p.locationType){
+    notice('bad','還差姓名、手機或開妝地點沒有填完喔。');
+    return;
+  }
+  if(!/^09\d{8}$/.test(p.phone)){
+    notice('bad','手機號碼請輸入 10 碼，例如 0912345678 ♡');
+    return;
+  }
+  if(p.locationType==='到府服務／自選地點'&&!p.area){
+    notice('bad','請填寫開妝詳細地址或附近地標，以便確認交通距離與報價 ♡');
+    return;
+  }
+  if(serviceId==='wedding' && p.locationType==='到府服務／自選地點' && !p.hasElevator){
+    notice('bad','到府服務再幫我選一下現場有沒有電梯 ♡');
+    return;
+  }
 
   const b=$('submit');
   b.disabled=true;
   b.textContent='正在送出預約…';
   notice('','正在送出資料…');
 
+  console.log('BOOKING_SUBMIT_START',{
+    requestId:p.requestId,
+    serviceId:p.serviceId,
+    date:p.date,
+    time:p.time,
+    hasIdToken:!!p.idToken,
+    hasAccessToken:!!p.accessToken
+  });
+
   try{
-    // 先讓 Apps Script 完整建立預約；POST 完成後再查一次結果。
-    // 避免建立過程中同時產生大量 doGet，反而拖慢 Apps Script。
+    console.log('BOOKING_POST_START',p.requestId);
+
+    // v45 穩定流程：先完成 POST，再查 status。
     await postForm(p);
 
+    console.log('BOOKING_POST_DONE',p.requestId);
     notice('','預約資料已送出，正在完成最後確認…');
+
     const r=await pollStatus(p.requestId);
 
-    // 後端確認成功後，先切換成功畫面，再處理任何 LINE 對話。
+    console.log('BOOKING_STATUS_SUCCESS',{
+      requestId:p.requestId,
+      bookingId:r.id
+    });
+
     finalizeBookingSuccess(r,p);
 
-
-
   }catch(e){
+    console.error('BOOKING_SUBMIT_ERROR',e);
     notice('bad',e.message||'預約送出失敗，請再試一次。');
   }finally{
     b.disabled=false;
