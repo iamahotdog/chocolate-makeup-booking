@@ -328,7 +328,7 @@ function jsonp(params){
     s.onerror=()=>{cleanup();reject(new Error('連線失敗'))};
     s.src=API_URL+'?'+new URLSearchParams({...params,callback:cb}).toString();
     document.body.appendChild(s);
-    setTimeout(()=>{if(window[cb]){cleanup();reject(new Error('連線逾時'))}},15000);
+    setTimeout(()=>{if(window[cb]){cleanup();reject(new Error('連線逾時'))}},10000);
   });
 }
 
@@ -424,7 +424,7 @@ function card(x){
       <div class="time">${escapeHtml(x.time)}<span class="date">${escapeHtml(x.date.replaceAll('-','/'))}</span></div>
       <div class="main">
         <div class="service">${escapeHtml(x.service)}</div>
-        <div class="name">${escapeHtml(x.name)}｜${escapeHtml(x.phone)}</div>
+        <div class="name">${escapeHtml(x.name)}${(x.lineName||x.lineDisplayName||x.displayName)?'｜LINE：'+escapeHtml(x.lineName||x.lineDisplayName||x.displayName):''}</div>
         <span class="status ${cls}">${escapeHtml(x.status)}</span>
       </div>
     </div>
@@ -484,7 +484,27 @@ vacationCursor.setDate(1);
 let selectedVacationDates=new Set();
 let closedVacationDates=new Set();
 let vacationMonthCache={};
+let vacationLoadSeq=0;
 
+
+
+function getVacationCache(month){
+  const raw=vacationMonthCache[month];
+  if(!raw) return {closedDays:[],timeBlocks:[]};
+  if(Array.isArray(raw)) return {closedDays:raw,timeBlocks:[]};
+  return {
+    closedDays:Array.isArray(raw.closedDays)?raw.closedDays:[],
+    timeBlocks:Array.isArray(raw.timeBlocks)?raw.timeBlocks:[]
+  };
+}
+
+function setVacationCache(month,closedDays,timeBlocks){
+  vacationMonthCache[month]={
+    closedDays:[...new Set(closedDays||[])],
+    timeBlocks:Array.isArray(timeBlocks)?timeBlocks:[]
+  };
+  return vacationMonthCache[month];
+}
 
 
 
@@ -509,17 +529,23 @@ async function addTimeBlockAdmin(){
   if(!date){toast('請先選日期');return}
   if(!start || !end || end<=start){toast('請確認開始與結束時間');return}
   try{
+    toast('正在關閉時段…');
     await postForm({action:'admin_time_block_add',adminKey,date,start,end,reason});
     toast('已關閉這個時段');
-    delete vacationMonthCache[monthKey()];setTimeout(loadVacationMonth,180);
+    const month=monthKey();
+    delete vacationMonthCache[month];
+    setTimeout(()=>{ if(month===monthKey()) loadVacationMonth(); },120);
   }catch(e){toast('設定失敗')}
 }
 
 async function cancelTimeBlockAdmin(blockId){
   try{
+    toast('正在恢復時段…');
     await postForm({action:'admin_time_block_cancel',adminKey,blockId});
     toast('已恢復這個時段');
-    delete vacationMonthCache[monthKey()];setTimeout(loadVacationMonth,180);
+    const month=monthKey();
+    delete vacationMonthCache[month];
+    setTimeout(()=>{ if(month===monthKey()) loadVacationMonth(); },120);
   }catch(e){toast('恢復失敗')}
 }
 
@@ -540,8 +566,10 @@ function shiftVacationMonth(delta){
   vacationCursor.setDate(1);
   selectedVacationDates.clear();
   const month=monthKey();
-  closedVacationDates=new Set(vacationMonthCache[month]||[]);
+  const cached=getVacationCache(month);
+  closedVacationDates=new Set(cached.closedDays);
   renderVacationCalendar();
+  renderTimeBlocks(cached.timeBlocks);
   loadVacationMonth();
 }
 
@@ -551,29 +579,29 @@ function monthKey(){
 
 async function loadVacationMonth(){
   const month=monthKey();
-  const cached=vacationMonthCache[month];
+  const seq=++vacationLoadSeq;
+  const cached=getVacationCache(month);
+  const hasCache=!!vacationMonthCache[month];
 
-  if(cached){
-    closedVacationDates=new Set(cached.closedDays||[]);
-    renderVacationCalendar();
-    renderTimeBlocks(cached.timeBlocks||[]);
-  }else{
-    closedVacationDates=new Set();
-    renderVacationCalendar();
-  }
+  closedVacationDates=new Set(cached.closedDays);
+  renderVacationCalendar();
+  renderTimeBlocks(cached.timeBlocks);
 
   try{
-    const r=await jsonp({action:'admin_vacation_snapshot',adminKey,month});
+    const r=await jsonp({action:'admin_vacation_snapshot',adminKey,month,_ts:Date.now()});
+    if(seq!==vacationLoadSeq || month!==monthKey()) return;
     if(!r.ok) throw new Error(r.message||'讀取失敗');
 
-    const closed=(r.closedDays||[]).map(x=>x.date);
+    const closed=(r.closedDays||[]).map(x=>typeof x==='string'?x:x.date).filter(Boolean);
     const blocks=r.timeBlocks||[];
-    vacationMonthCache[month]={closedDays:closed,timeBlocks:blocks};
+    setVacationCache(month,closed,blocks);
     closedVacationDates=new Set(closed);
     renderVacationCalendar();
     renderTimeBlocks(blocks);
   }catch(e){
-    if(!cached) toast('休假資料讀取較慢');
+    if(seq!==vacationLoadSeq || month!==monthKey()) return;
+    if(!hasCache) toast(e.message||'休假資料讀取失敗');
+    else toast('連線較慢，先顯示最近休假資料');
   }
 }
 
@@ -616,29 +644,27 @@ async function applyVacationBulk(mode){
   const dates=[...selectedVacationDates];
   if(!dates.length){toast('請先選日期');return}
 
+  const month=monthKey();
+  const cached=getVacationCache(month);
+  const current=new Set(cached.closedDays);
+
+  dates.forEach(d=>mode==='close'?current.add(d):current.delete(d));
+  setVacationCache(month,[...current],cached.timeBlocks);
+  closedVacationDates=new Set(current);
+  selectedVacationDates.clear();
+  renderVacationCalendar();
+  toast(mode==='close'?'休假日已更新':'已恢復開放');
+
   try{
-    toast(mode==='close'?'正在設定休假…':'正在恢復開放…');
-    await fetch(API_URL,{
-      method:'POST',
-      mode:'no-cors',
-      headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},
-      body:new URLSearchParams({
-        action:'admin_vacation_bulk',
-        adminKey,
-        dates:JSON.stringify(dates),
-        mode
-      })
-    });
-    const month=monthKey();
-    const current=new Set(vacationMonthCache[month]||[]);
-    dates.forEach(d=>mode==='close'?current.add(d):current.delete(d));
-    vacationMonthCache[month]=[...current];
-    closedVacationDates=new Set(current);
-    selectedVacationDates.clear();
-    renderVacationCalendar();
-    toast(mode==='close'?'已設定休假日':'已恢復開放');
+    await postForm({action:'admin_vacation_bulk',adminKey,dates:JSON.stringify(dates),mode});
+    setTimeout(()=>{
+      delete vacationMonthCache[month];
+      if(month===monthKey() && managerPage==='vacation') loadVacationMonth();
+    },250);
   }catch(e){
-    toast(e.message||'更新失敗');
+    delete vacationMonthCache[month];
+    toast(e.message||'更新失敗，正在重新讀取');
+    if(month===monthKey()) loadVacationMonth();
   }
 }
 
