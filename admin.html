@@ -412,14 +412,38 @@ async function loginAdmin(){
   const key=document.getElementById('adminKey').value.trim();
   if(!key)return;
   adminKey=key;
+
+  const login=document.getElementById('login');
+  const dashboard=document.getElementById('dashboard');
+  const list=document.getElementById('list');
+
+  // 先切入管理畫面，避免使用者盯著登入頁等待 API。
+  login.style.display='none';
+  dashboard.style.display='block';
+
+  const cached=adminLocalCacheGet('pending');
+  if(cached){
+    render(cached);
+  }else{
+    list.innerHTML='<div class="loading">正在整理今天的預約…</div>';
+    document.getElementById('summary').textContent='';
+  }
+
   try{
     const r=await jsonp({action:'admin_list',adminKey,filter:'pending'});
-    if(!r.ok && r.message)throw new Error(r.message);
+    if(!r.ok)throw new Error(r.message||'管理密碼錯誤');
+
+    const items=r.items||[];
     sessionStorage.setItem('choco_admin_key',adminKey);
-    document.getElementById('login').style.display='none';
-    document.getElementById('dashboard').style.display='block';
-    render(r.items||[]);
+    adminLocalCacheSet('pending',items);
+    render(items);
+
+    // 登入完成後在背景預熱其他常用分頁，不阻塞畫面。
+    warmAdminFilters();
   }catch(e){
+    dashboard.style.display='none';
+    login.style.display='block';
+    sessionStorage.removeItem('choco_admin_key');
     toast(e.message||'管理密碼錯誤');
   }
 }
@@ -430,12 +454,24 @@ function adminLocalCacheGet(filter){
     const raw=sessionStorage.getItem('choco_list_'+filter);
     if(!raw)return null;
     const obj=JSON.parse(raw);
-    if(Date.now()-obj.ts>30000)return null;
+    if(Date.now()-obj.ts>60000)return null;
     return obj.items||[];
   }catch(_){return null}
 }
 function adminLocalCacheSet(filter,items){
   try{sessionStorage.setItem('choco_list_'+filter,JSON.stringify({ts:Date.now(),items}))}catch(_){}
+}
+
+function warmAdminFilters(){
+  ['confirmed','today','released'].forEach((f,index)=>{
+    setTimeout(async()=>{
+      if(adminLocalCacheGet(f)) return;
+      try{
+        const r=await jsonp({action:'admin_list',adminKey,filter:f});
+        if(r && r.ok) adminLocalCacheSet(f,r.items||[]);
+      }catch(_){}
+    },500 + index*350);
+  });
 }
 
 async function load(){
