@@ -204,6 +204,7 @@ body{padding-bottom:max(28px,env(safe-area-inset-bottom))}
   <div class="loginCard">
     <h1>巧克力預約管理 ♡</h1>
     <p>巧克力手機管理頁。確認訂金、釋放時段與休假設定都可以直接在這裡完成。</p>
+    <div id="apiDiag" style="margin:0 0 14px;padding:10px 12px;border-radius:12px;background:#fff8f3;border:1px solid #ead7cc;color:#76584a;font-size:11px;line-height:1.55;display:none;white-space:pre-line"></div>
     <input id="adminKey" class="control" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="10" autocomplete="current-password" placeholder="輸入管理密碼">
     <button class="primary" onclick="loginAdmin()">進入預約管理</button>
   </div>
@@ -321,14 +322,82 @@ async function postForm(data){
 
 function jsonp(params){
   return new Promise((resolve,reject)=>{
-    const cb='adm_'+Date.now()+'_'+Math.random().toString(36).slice(2);
+    const started=Date.now();
+    const cb='admCallback_'+Date.now()+'_'+Math.random().toString(36).slice(2);
     const s=document.createElement('script');
-    const cleanup=()=>{delete window[cb];s.remove()};
-    window[cb]=(data)=>{cleanup();resolve(data)};
-    s.onerror=()=>{cleanup();reject(new Error('連線失敗'))};
-    s.src=API_URL+'?'+new URLSearchParams({...params,callback:cb}).toString();
+    const diag=$('apiDiag');
+
+    const showDiag=(msg)=>{
+      if(diag){
+        diag.style.display='block';
+        diag.textContent=msg;
+      }
+      console.log('[ADMIN API]',msg);
+    };
+
+    const cleanup=()=>{
+      try{delete window[cb]}catch(_){}
+      try{s.remove()}catch(_){}
+    };
+
+    window[cb]=(data)=>{
+      const elapsed=Date.now()-started;
+      showDiag(
+        '✓ Callback received\n'+
+        '耗時：'+elapsed+' ms\n'+
+        'callback：'+cb
+      );
+      cleanup();
+      resolve(data);
+    };
+
+    s.onload=()=>{
+      s.dataset.loaded='yes';
+      showDiag(
+        'Script loaded，但尚未收到 callback\n'+
+        '耗時：'+(Date.now()-started)+' ms\n'+
+        'callback：'+cb
+      );
+    };
+
+    s.onerror=()=>{
+      const elapsed=Date.now()-started;
+      showDiag(
+        '✕ Script load error\n'+
+        '耗時：'+elapsed+' ms\n'+
+        'callback：'+cb
+      );
+      cleanup();
+      reject(new Error('連線失敗'));
+    };
+
+    const q=new URLSearchParams({
+      ...params,
+      callback:cb,
+      _diagTs:Date.now()
+    });
+    s.src=API_URL+'?'+q.toString();
+
+    showDiag(
+      '1. 準備送出 JSONP\n'+
+      'callback：'+cb+'\n'+
+      'API：'+API_URL
+    );
+
     document.body.appendChild(s);
-    setTimeout(()=>{if(window[cb]){cleanup();reject(new Error('連線逾時'))}},10000);
+
+    setTimeout(()=>{
+      if(window[cb]){
+        showDiag(
+          '✕ Timeout\n'+
+          '已等待：'+(Date.now()-started)+' ms\n'+
+          '狀態：script.onload='+(s.dataset.loaded||'unknown')+'\n'+
+          'callback：'+cb
+        );
+        cleanup();
+        reject(new Error('連線逾時'));
+      }
+    },12000);
   });
 }
 
