@@ -325,85 +325,46 @@ async function postForm(data){
   await fetch(API_URL,{method:'POST',mode:'no-cors',body});
 }
 
-function jsonp(params){
+function jsonpOnce(params,timeoutMs=8000){
   return new Promise((resolve,reject)=>{
-    const started=Date.now();
     const cb='admCallback_'+Date.now()+'_'+Math.random().toString(36).slice(2);
-    const s=document.createElement('script');
-    const diag=$('apiDiag');
-
-    const showDiag=(msg)=>{
-      if(diag){
-        diag.style.display='block';
-        diag.textContent=msg;
-      }
-      console.log('[ADMIN API]',msg);
-    };
+    const script=document.createElement('script');
+    let settled=false;
+    let timeoutId=null;
 
     const cleanup=()=>{
+      if(timeoutId) clearTimeout(timeoutId);
       try{delete window[cb]}catch(_){}
-      try{s.remove()}catch(_){}
+      try{script.remove()}catch(_){}
     };
-
-    window[cb]=(data)=>{
-      const elapsed=Date.now()-started;
-      showDiag(
-        '✓ Callback received\n'+
-        '耗時：'+elapsed+' ms\n'+
-        'callback：'+cb
-      );
+    const finish=(fn,value)=>{
+      if(settled)return;
+      settled=true;
       cleanup();
-      resolve(data);
+      fn(value);
     };
 
-    s.onload=()=>{
-      s.dataset.loaded='yes';
-      showDiag(
-        'Script loaded，但尚未收到 callback\n'+
-        '耗時：'+(Date.now()-started)+' ms\n'+
-        'callback：'+cb
-      );
-    };
+    window[cb]=(data)=>finish(resolve,data);
+    script.onerror=()=>finish(reject,new Error('連線失敗'));
 
-    s.onerror=()=>{
-      const elapsed=Date.now()-started;
-      showDiag(
-        '✕ Script load error\n'+
-        '耗時：'+elapsed+' ms\n'+
-        'callback：'+cb
-      );
-      cleanup();
-      reject(new Error('連線失敗'));
-    };
-
-    const q=new URLSearchParams({
-      ...params,
-      callback:cb,
-      _diagTs:Date.now()
-    });
-    s.src=API_URL+'?'+q.toString();
-
-    showDiag(
-      '1. 準備送出 JSONP\n'+
-      'callback：'+cb+'\n'+
-      'API：'+API_URL
-    );
-
-    document.body.appendChild(s);
-
-    setTimeout(()=>{
-      if(window[cb]){
-        showDiag(
-          '✕ Timeout\n'+
-          '已等待：'+(Date.now()-started)+' ms\n'+
-          '狀態：script.onload='+(s.dataset.loaded||'unknown')+'\n'+
-          'callback：'+cb
-        );
-        cleanup();
-        reject(new Error('連線逾時'));
-      }
-    },12000);
+    const q=new URLSearchParams({...params,callback:cb,_ts:Date.now()});
+    script.src=API_URL+'?'+q.toString();
+    document.body.appendChild(script);
+    timeoutId=setTimeout(()=>finish(reject,new Error('連線逾時')),timeoutMs);
   });
+}
+
+async function jsonp(params,{retries=1,timeoutMs=8000}={}){
+  let lastErr=null;
+  for(let i=0;i<=retries;i++){
+    try{
+      return await jsonpOnce(params,i===0?timeoutMs:Math.max(timeoutMs,10000));
+    }catch(e){
+      lastErr=e;
+      if(i<retries) await new Promise(r=>setTimeout(r,350+250*i));
+    }
+  }
+  throw lastErr||new Error('連線失敗');
 }
 
 document.getElementById('adminKey').addEventListener('input',e=>{e.target.value=e.target.value.replace(/\D/g,'')});
@@ -441,10 +402,18 @@ async function loginAdmin(){
     // 登入完成後在背景預熱其他常用分頁，不阻塞畫面。
     warmAdminFilters();
   }catch(e){
-    dashboard.style.display='none';
-    login.style.display='block';
-    sessionStorage.removeItem('choco_admin_key');
-    toast(e.message||'管理密碼錯誤');
+    const msg=e.message||'連線失敗';
+    const authError=/密碼|權限|unauthorized|forbidden/i.test(msg);
+    if(authError){
+      dashboard.style.display='none';
+      login.style.display='block';
+      sessionStorage.removeItem('choco_admin_key');
+      adminKey='';
+    }else{
+      dashboard.style.display='block';
+      login.style.display='none';
+    }
+    toast(authError?msg:'連線較慢，已保留目前畫面，可直接重試');
   }
 }
 
@@ -779,22 +748,43 @@ async function applyVacationBulk(mode){
 }
 
 
+function renderServiceSettingsAdmin(items){
+  const box=document.getElementById('serviceSettingsList');
+  box.innerHTML=(items||[]).map(x=>{
+    const lesson=x.id==='lesson';
+    const sub=lesson?'僅週六、週日，固定 11:00–15:00':'依目前預約規則開放';
+    return `<div class="serviceSettingCard">
+      <div class="serviceSettingText"><b>${escapeHtml(x.name)}</b><small>${sub}</small></div>
+      <button class="switch ${x.enabled?'on':''}" onclick="toggleServiceSetting('${x.id}',${!x.enabled})" aria-label="切換服務"></button>
+    </div>`;
+  }).join('');
+}
+
 async function loadServiceSettingsAdmin(){
   const box=document.getElementById('serviceSettingsList');
-  box.innerHTML='<div class="loading">正在讀取服務設定…</div>';
+  let cached=null;
+  try{cached=JSON.parse(sessionStorage.getItem('choco_service_settings')||'null')}catch(_){}
+
+  if(cached&&Array.isArray(cached.items)&&cached.items.length){
+    renderServiceSettingsAdmin(cached.items);
+  }else{
+    box.innerHTML='<div class="loading">正在讀取服務設定…</div>';
+  }
+
   try{
-    const r=await jsonp({action:'admin_service_settings',adminKey});
+    const r=await jsonp({action:'admin_service_settings',adminKey},{retries:1,timeoutMs:7000});
+    if(!r.ok && r.message) throw new Error(r.message);
     const items=r.items||[];
-    box.innerHTML=items.map(x=>{
-      const lesson=x.id==='lesson';
-      const sub=lesson?'僅週六、週日，固定 11:00–15:00':'依目前預約規則開放';
-      return `<div class="serviceSettingCard">
-        <div class="serviceSettingText"><b>${escapeHtml(x.name)}</b><small>${sub}</small></div>
-        <button class="switch ${x.enabled?'on':''}" onclick="toggleServiceSetting('${x.id}',${!x.enabled})" aria-label="切換服務"></button>
-      </div>`;
-    }).join('');
+    if(items.length){
+      renderServiceSettingsAdmin(items);
+      try{sessionStorage.setItem('choco_service_settings',JSON.stringify({ts:Date.now(),items}))}catch(_){}
+    }
   }catch(e){
-    box.innerHTML='<div class="empty">讀取失敗<br><button class="btn restore" style="margin-top:12px" onclick="loadServiceSettingsAdmin()">重新整理</button></div>';
+    if(!(cached&&cached.items&&cached.items.length)){
+      box.innerHTML='<div class="empty">目前連線較慢<br><button class="btn restore" style="margin-top:12px" onclick="loadServiceSettingsAdmin()">重新整理</button></div>';
+    }else{
+      toast('服務設定同步較慢，目前先顯示上次成功資料');
+    }
   }
 }
 
@@ -807,7 +797,7 @@ async function toggleServiceSetting(serviceId,enabled){
       headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},
       body:new URLSearchParams({action:'admin_service_update',adminKey,serviceId,enabled:String(enabled)})
     });
-    setTimeout(loadServiceSettingsAdmin,300);
+    setTimeout(loadServiceSettingsAdmin,500);
     toast(enabled?'已開放服務':'已暫停服務');
   }catch(e){
     toast(e.message||'更新失敗');

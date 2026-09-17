@@ -474,6 +474,11 @@ body.modalOpen{
   <div id="availability" class="notice hidden"></div>
 
   <div class="field"><label class="requiredLabel">怎麼稱呼你？</label><input id="name" class="control" autocomplete="name" placeholder="姓名" required></div>
+  <div class="field">
+    <label class="requiredLabel">聯絡手機</label>
+    <input id="phone" class="control" type="tel" inputmode="numeric" autocomplete="tel" maxlength="10" placeholder="0912345678" required>
+    <div class="fieldHint">主要以 LINE 訊息聯繫為主，非必要不會使用電話聯繫</div>
+  </div>
   <div class="field"><label id="locationLabel" class="requiredLabel">在哪裡開妝？</label><select id="location" class="control" onchange="toggleArea()" required></select></div>
   <div id="areaField" class="field hidden"><label class="requiredLabel">開妝詳細地點</label><input id="area" class="control" placeholder="例：臺北市信義區○○路／臺北車站附近飯店" required><div class="helper">請填寫詳細地址或附近地標，以便確認交通距離與報價 ♡</div></div>
   
@@ -966,35 +971,80 @@ function validateNotPast(){
 
 
 let serviceSettings={registration:true,wedding:true,makeover:true,lesson:false};
+const SERVICE_CACHE_KEY='choco_public_service_settings_v1';
+let serviceSettingsLoading=null;
+let lastServiceSettingsSync=0;
 
-async function loadServiceSettings(){
-  try{
-    const r=await jsonp({action:'public_service_settings'});
-    (r.items||[]).forEach(x=>serviceSettings[x.id]=!!x.enabled);
-
-    ['registration','wedding','makeover'].forEach(id=>{
-      const btn=document.querySelector(`[onclick="openForm('${id}')"]`);
-      if(btn){
-        btn.disabled=!serviceSettings[id];
-        btn.style.opacity=serviceSettings[id]?'1':'.55';
-        btn.textContent=serviceSettings[id]?'預約':'暫未開放';
-      }
-    });
-
-    const lessonBtn=$('lessonBookBtn');
-    const lessonText=$('lessonStatusText');
-    if(lessonBtn){
-      lessonBtn.disabled=!serviceSettings.lesson;
-      lessonBtn.style.opacity=serviceSettings.lesson?'1':'.55';
-      lessonBtn.textContent=serviceSettings.lesson?'預約':'目前未開放';
+function applyServiceSettings(){
+  ['registration','wedding','makeover'].forEach(id=>{
+    const btn=document.querySelector(`[onclick="openForm('${id}')"]`);
+    if(btn){
+      btn.disabled=!serviceSettings[id];
+      btn.style.opacity=serviceSettings[id]?'1':'.55';
+      btn.textContent=serviceSettings[id]?'預約':'暫未開放';
     }
-    if(lessonText){
-      lessonText.textContent=serviceSettings.lesson?'週六、週日｜11:00–15:00':'目前未開放預約';
-    }
-  }catch(e){
-    console.warn('service settings failed',e);
+  });
+
+  const lessonBtn=$('lessonBookBtn');
+  const lessonText=$('lessonStatusText');
+  if(lessonBtn){
+    lessonBtn.disabled=!serviceSettings.lesson;
+    lessonBtn.style.opacity=serviceSettings.lesson?'1':'.55';
+    lessonBtn.textContent=serviceSettings.lesson?'預約':'目前未開放';
+  }
+  if(lessonText){
+    lessonText.textContent=serviceSettings.lesson?'週六、週日｜11:00–15:00':'目前未開放預約';
   }
 }
+
+function restoreServiceSettingsCache(){
+  try{
+    const cached=JSON.parse(localStorage.getItem(SERVICE_CACHE_KEY)||'null');
+    if(cached && cached.items && Date.now()-cached.ts<6*60*60*1000){
+      cached.items.forEach(x=>serviceSettings[x.id]=!!x.enabled);
+      applyServiceSettings();
+      return true;
+    }
+  }catch(_){}
+  return false;
+}
+
+function saveServiceSettingsCache(items){
+  try{
+    localStorage.setItem(SERVICE_CACHE_KEY,JSON.stringify({ts:Date.now(),items}));
+  }catch(_){}
+}
+
+async function loadServiceSettings(force=false){
+  if(serviceSettingsLoading) return serviceSettingsLoading;
+  if(!force && Date.now()-lastServiceSettingsSync<15000) return;
+
+  serviceSettingsLoading=(async()=>{
+    let lastErr=null;
+    for(let attempt=0;attempt<2;attempt++){
+      try{
+        const r=await jsonp({action:'public_service_settings'}, attempt===0?6500:9000);
+        const items=(r&&r.items)||[];
+        if(!items.length) throw new Error('服務設定為空');
+        items.forEach(x=>serviceSettings[x.id]=!!x.enabled);
+        applyServiceSettings();
+        saveServiceSettingsCache(items);
+        lastServiceSettingsSync=Date.now();
+        return;
+      }catch(e){
+        lastErr=e;
+        if(attempt===0) await new Promise(r=>setTimeout(r,350));
+      }
+    }
+    console.warn('service settings failed',lastErr);
+  })();
+
+  try{ await serviceSettingsLoading; }
+  finally{ serviceSettingsLoading=null; }
+}
+
+restoreServiceSettingsCache();
+applyServiceSettings();
 
 function openForm(id){
   if(serviceSettings[id]===false){
@@ -1020,6 +1070,11 @@ function openForm(id){
     $('minute').value='00';
   }
   toggleArea();loadDayOccupancy(true);refreshAllowedTimeOptions();scheduleCheck();window.scrollTo({top:0,behavior:'smooth'});
+}
+if($('phone')){
+  $('phone').addEventListener('input',e=>{
+    e.target.value=e.target.value.replace(/\D/g,'').slice(0,10);
+  });
 }
 function backToServices(){$('formPage').style.display='none';$('services').style.display='block';window.scrollTo({top:0,behavior:'smooth'})}
 function step(id,d){let e=$(id),min=id==='sets'?1:0;e.value=Math.max(min,parseInt(e.value||0)+d);refreshAllowedTimeOptions();scheduleCheck()}
@@ -1223,17 +1278,32 @@ function notice(cls,msg){
 }
 function scheduleCheck(){clearTimeout(timer);timer=setTimeout(checkAvailability,180)}
 
-function jsonp(params){
+function jsonp(params,timeoutMs=8500){
   return new Promise((resolve,reject)=>{
     const cb='cb_'+Date.now()+'_'+Math.random().toString(36).slice(2);
-    const s=document.createElement('script');
-    const cleanup=()=>{delete window[cb];s.remove()};
-    window[cb]=(data)=>{cleanup();resolve(data)};
-    s.onerror=()=>{cleanup();reject(new Error('API error'))};
-    const q=new URLSearchParams({...params,callback:cb});
-    s.src=API_URL+'?'+q.toString();
-    document.body.appendChild(s);
-    setTimeout(()=>{if(window[cb]){cleanup();reject(new Error('timeout'))}},10000);
+    const script=document.createElement('script');
+    let settled=false;
+    let timeoutId=null;
+
+    const cleanup=()=>{
+      if(timeoutId) clearTimeout(timeoutId);
+      try{delete window[cb]}catch(_){}
+      try{script.remove()}catch(_){}
+    };
+    const finish=(fn,value)=>{
+      if(settled)return;
+      settled=true;
+      cleanup();
+      fn(value);
+    };
+
+    window[cb]=(data)=>finish(resolve,data);
+    script.onerror=()=>finish(reject,new Error('API error'));
+
+    const q=new URLSearchParams({...params,callback:cb,_ts:Date.now()});
+    script.src=API_URL+'?'+q.toString();
+    document.body.appendChild(script);
+    timeoutId=setTimeout(()=>finish(reject,new Error('timeout')),timeoutMs);
   });
 }
 
@@ -1321,6 +1391,7 @@ function validateRequiredFields(){
   if(!$('date').value) missing.push('預約日期');
   if(serviceId!=='lesson' && (!$('hour').value || !$('minute').value)) missing.push('開始時間');
   if(!$('name').value.trim()) missing.push('姓名');
+  if(!$('phone').value.trim()) missing.push('聯絡手機');
   if(!$('location').value) missing.push('開妝地點');
 
   if($('location').value==='到府服務／自選地點' && !$('area').value.trim()){
@@ -1435,6 +1506,7 @@ async function submitBooking(){
     action:'book',
     requestId:makeRequestId(),
     name:$('name').value.trim(),
+    phone:$('phone').value.trim(),
     lineName:lineDisplayName || '',
     locationType:$('location').value,
     area:$('area').value.trim(),
@@ -1454,8 +1526,12 @@ async function submitBooking(){
     accessToken:lineAccessToken
   });
 
-  if(!p.name||!p.locationType){
-    notice('bad','還差姓名或開妝地點沒有填完喔。');
+  if(!p.name||!p.phone||!p.locationType){
+    notice('bad','還差姓名、手機或地點沒有填完喔。');
+    return;
+  }
+  if(!/^09\d{8}$/.test(p.phone)){
+    notice('bad','手機號碼請填寫 09 開頭的 10 碼手機號碼 ♡');
     return;
   }
   if(p.locationType==='到府服務／自選地點'&&!p.area){
@@ -1509,8 +1585,15 @@ async function submitBooking(){
 }
 
 initForm();
-loadServiceSettings();
+loadServiceSettings(true);
 initLiff();
+
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='visible') loadServiceSettings(true);
+});
+window.addEventListener('focus',()=>{
+  if(Date.now()-lastServiceSettingsSync>15000) loadServiceSettings(true);
+});
 </script>
 </body>
 </html>
