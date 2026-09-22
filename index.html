@@ -67,8 +67,8 @@
     .formHead p { margin: 0; color: var(--muted); font-size: 11.5px; line-height: 1.55; }
     .formBody { padding: 17px; }
     .field { margin-bottom: 16px; }
-    .field label { display: block; margin-bottom: 7px; color: var(--ink); font-size: 16px; line-height: 1.45; font-weight: 800; }
-    .control { width: 100%; max-width: 100%; min-width: 0; display: block; padding: 13px 14px; border: 1px solid #dfc8bb; border-radius: 14px; background: #fff; color: var(--ink); font-size: 16px; line-height: 1.45; outline: 0; }
+    .field label { display: block; margin-bottom: 7px; color: var(--ink); font-size: 15px; line-height: 1.45; font-weight: 800; }
+    .control { width: 100%; max-width: 100%; min-width: 0; display: block; padding: 13px 14px; border: 1px solid #dfc8bb; border-radius: 14px; background: #fff; color: var(--ink); font-size: 15px; line-height: 1.45; outline: 0; }
     .control:focus { border-color: #b98364; box-shadow: 0 0 0 4px rgba(185,131,100,.12); }
     input[type="date"] { width: 100%; max-width: 100%; min-width: 0; display: block; box-sizing: border-box; -webkit-appearance: none; appearance: none; font-size: 16px; line-height: 1.2; overflow: hidden; }
     input[type="date"]::-webkit-date-and-time-value { text-align: left; min-height: 1.2em; }
@@ -151,14 +151,14 @@
       text-align: center;
     }
     .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-    .counterLabel { font-size: 10.5px; color: var(--muted); margin-bottom: 5px; }
+    .counterLabel { font-size: 11px; color: var(--muted); margin-bottom: 5px; }
     .counter { display: grid; grid-template-columns: 40px 1fr 40px; border: 1px solid #dfc8bb; border-radius: 14px; overflow: hidden; background: #fff; }
     .counter button { border: 0; background: #f8eee8; color: var(--brown); font-size: 20px; }
-    .counter input { min-width: 0; border: 0; text-align: center; background: #fff; outline: 0; }
+    .counter input { min-width: 0; border: 0; text-align: center; background: #fff; font-size: 15px; outline: 0; }
     .notice { padding: 12px 13px; margin: 2px 0 16px; border-radius: 13px; background: #f6efe9; color: #74594b; font-size: 11.5px; line-height: 1.5; }
     .notice.ok { background: var(--green); color: var(--greenInk); }
     .notice.bad { background: var(--red); color: var(--redInk); }
-    .helper { margin-top: 6px; color: var(--muted); font-size: 10.5px; line-height: 1.5; }
+    .helper { margin-top: 6px; color: var(--muted); font-size: 11px; line-height: 1.55; }
     .hidden { display: none !important; }
     .oaCard { margin: 4px 0 17px; padding: 13px 14px; border: 1px dashed #dfbba6; border-radius: 14px; background: #fff7f2; color: #76584a; font-size: 11.5px; line-height: 1.6; }
     .oaCard b { color: var(--ink); }
@@ -175,7 +175,7 @@
     .brandModalCard { position: relative; width: min(100%, 340px); max-height: calc(100dvh - 48px); overflow: auto; padding: 22px 20px 18px; margin: 0; border: 1px solid var(--line); border-radius: 24px; background: #fffdfb; box-shadow: 0 24px 70px rgba(50,30,21,.25); text-align: center; }
     .brandModalMagic { width: 44px; height: 44px; display: grid; place-items: center; margin: 0 auto 12px; border-radius: 15px; background: #f8eee8; font-size: 23px; }
     .brandModalTitle { margin: 0 0 8px; color: var(--ink); font-size: 20px; line-height: 1.45; font-weight: 800; }
-    .brandModalText { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.75; white-space: pre-line; }
+    .brandModalText { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.65; white-space: pre-line; text-align: left; }
     .brandModalActions { display: flex; gap: 10px; margin-top: 18px; }
     .brandModalBtn { min-width: 0; flex: 1; border: 0; border-radius: 14px; padding: 12px 13px; font-weight: 800; }
     .brandModalBtn.primary { color: #fff; background: linear-gradient(#7b5039, #613928); box-shadow: 0 3px 0 #46291e; }
@@ -185,7 +185,7 @@
     .detailLink { display: inline-flex; align-items: center; gap: 5px; margin-top: 7px; border: 0; padding: 0; background: none; color: var(--brown); font-size: 11px; font-weight: 800; text-decoration: underline; text-underline-offset: 3px; }
     .priorityNote { margin: 0 16px 14px; padding: 13px 14px; border-radius: 15px; background: #fff4ee; border: 1px solid #e7c9b9; color: #755347; font-size: 12px; line-height: 1.65; }
     .priorityNote b { color: var(--ink); }
-    .fieldHint { margin-top: 6px; color: var(--muted); font-size: 10.8px; line-height: 1.6; }
+    .fieldHint { margin-top: 6px; color: var(--muted); font-size: 11px; line-height: 1.55; }
     .successSimple { margin: 24px 16px; padding: 24px 21px; border-radius: 23px; background: var(--green); color: var(--greenInk); box-shadow: var(--shadow); }
     .successSimple h2 { margin: 0 0 10px; font-size: 24px; }
     .successSimple p { margin: 8px 0 0; font-size: 13px; line-height: 1.75; }
@@ -219,7 +219,7 @@
     .successStrong { color: var(--ink); font-weight: 800; }
     .successTimeHero { padding: 2px 0 2px; }
     .successTimeTitle { margin: 0 0 7px; font-size: 22px; line-height: 1.35; }
-    .successTimeValue { margin: 0; color: var(--brown); font-size: 15px; font-weight: 800; line-height: 1.55; }
+    .successTimeValue { margin: 0; color: var(--brown); font-size: 15px; font-weight: 500; line-height: 1.6; }
     .successPhotoList { margin: 8px 0 0; padding: 0; list-style: none; }
     .successPhotoList li { margin: 4px 0; }
     .quickTipBtn { display: inline-flex; align-items: center; gap: 6px; margin: 0; padding: 0; border: 0; background: none; color: var(--brown); font-size: 13px; font-weight: 800; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; white-space: nowrap; }
@@ -522,7 +522,7 @@
           <div id="noteField" class="field">
             <div class="fieldLabelRow">
               <label>有沒有一定要先告訴巧克力的事？</label>
-              <button type="button" id="weddingLightPhotoHintBtn" class="quickTipBtn hidden" onclick="showWeddingLightPhotoHint()">我想拍攝輕婚紗 👰🏻‍♀️</button>
+              <button type="button" id="weddingLightPhotoHintBtn" class="quickTipBtn hidden" onclick="showWeddingLightPhotoHint()">想拍輕婚紗🙋🏻‍♀️</button>
             </div>
             <textarea id="note" class="control" rows="3" placeholder="其他補充"></textarea>
           </div>
@@ -609,8 +609,8 @@
 
     function showWeddingLightPhotoHint() {
       showBrandModal(
-        '我想拍攝輕婚紗 👰🏻‍♀️',
-        '若想拍攝輕婚紗，以至於無需全日跟妝，請於上方預約時間中加上輕婚紗拍攝所需時長（ex: 男女妝髮 8:00-12:00，輕婚紗拍攝 12:00-13:00，直接預約 8:00-13:00），並於備註欄註明「需要輕婚紗報價」，謝謝🙏',
+        '想拍輕婚紗🙋🏻‍♀️',
+        '若只需要短時間的輕婚紗拍攝、不需要全日跟妝，可以把拍攝時間一起算進預約時段。\n\n例如：\n妝髮 08:00–12:00\n輕婚紗拍攝 12:00–13:00\n→ 請預約 08:00–13:00\n\n最後在備註寫上「需要輕婚紗報價」即可 ♡',
         '👰🏻‍♀️',
         '我知道了'
       );
@@ -1807,7 +1807,7 @@
 
               <div class="successTimeHero">
                 <h2 class="successTimeTitle">時間幫您登記好囉 ♡</h2>
-                <p class="successTimeValue">${bookingTime}</p>
+                <p class="successTimeValue">${names[p.serviceId]}　${bookingTime}</p>
               </div>
 
               <div class="successBlockCard">
@@ -1836,7 +1836,7 @@
 
               <div class="successTimeHero">
                 <h2 class="successTimeTitle">時間幫您登記好囉 ♡</h2>
-                <p class="successTimeValue">${bookingTime}</p>
+                <p class="successTimeValue">${names[p.serviceId]}　${bookingTime}</p>
               </div>
 
               <div class="successBlockCard">
