@@ -40,6 +40,16 @@
     .primary { width: 100%; margin-top: 11px; border: 0; border-radius: 14px; padding: 13px; background: linear-gradient(#7b5039, #613928); color: #fff; font-weight: 800; box-shadow: 0 3px 0 #45291e; }
     .primary:active { transform: translateY(3px); box-shadow: none; }
     .dashboard { display: none; }
+    /* 頁面切換的柔和轉場，跟前台 index.html 用同一套邏輯：
+       離開的畫面先淡出/微移，結束後才切換 display，新畫面再淡入/微移進場。 */
+    .viewFade { transition: opacity .2s cubic-bezier(.4,0,.2,1), transform .2s cubic-bezier(.4,0,.2,1); }
+    .viewFade.fwd-leave { opacity: 0; transform: translateY(-10px) scale(.98); }
+    .viewFade.fwd-enter-from { opacity: 0; transform: translateY(16px) scale(.98); }
+    .viewFade.back-leave { opacity: 0; transform: translateY(10px) scale(.98); }
+    .viewFade.back-enter-from { opacity: 0; transform: translateY(-16px) scale(.98); }
+    @media (prefers-reduced-motion: reduce) {
+      .viewFade { transition: none !important; }
+    }
     .tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; padding: 13px 12px 5px; }
     .tab { border: 1px solid var(--line); border-radius: 999px; padding: 9px 5px; background: #fff; color: var(--muted); font-size: 11px; font-weight: 800; }
     .tab.active { background: var(--brown); border-color: var(--brown); color: #fff; }
@@ -282,6 +292,38 @@
     let adminLoadSeq = 0;
     let pendingAction = null;
 
+    // 柔和切換兩個畫面：先讓 hideEl 淡出＋微移，結束後才真的切換 display，
+    // showEl 再從一個輕微位移的透明狀態淡入到定位。dir 只影響進出的方向。
+    function fadeSwitch(hideEl, showEl, dir = 'fwd') {
+      if (!showEl) return;
+      if (!hideEl || hideEl === showEl) {
+        showEl.style.display = 'block';
+        showEl.classList.remove('hidden');
+        return;
+      }
+
+      const leaveClass = dir === 'fwd' ? 'fwd-leave' : 'back-leave';
+      const enterFromClass = dir === 'fwd' ? 'fwd-enter-from' : 'back-enter-from';
+
+      hideEl.classList.add('viewFade');
+      requestAnimationFrame(() => hideEl.classList.add(leaveClass));
+
+      setTimeout(() => {
+        hideEl.style.display = 'none';
+        hideEl.classList.add('hidden');
+        hideEl.classList.remove('viewFade', leaveClass);
+
+        showEl.style.display = 'block';
+        showEl.classList.remove('hidden');
+        showEl.classList.add('viewFade', enterFromClass);
+        void showEl.offsetHeight; // 強制 reflow，確保接下來的 class 移除會觸發轉場
+        requestAnimationFrame(() => {
+          showEl.classList.remove(enterFromClass);
+          setTimeout(() => showEl.classList.remove('viewFade'), 220);
+        });
+      }, 170);
+    }
+
     async function postForm(data) {
       const body = new URLSearchParams();
       Object.entries(data).forEach(([k, v]) => {
@@ -348,37 +390,26 @@
 
       const login = $('login');
       const dashboard = $('dashboard');
-      const list = $('list');
 
-      login.style.display = 'none';
-      dashboard.style.display = 'block';
-      $('list').innerHTML = '<div class="loading">載入中…</div>';
+      fadeSwitch(login, dashboard, 'fwd');
 
-      const cached = adminLocalCacheGet('pending');
-      if (cached) {
-        render(cached);
-      } else {
-        list.innerHTML = '<div class="loading">載入中…</div>';
-      }
+      const hasCache = renderFilter(filter);
+      if (!hasCache) $('list').innerHTML = '<div class="loading">載入中…</div>';
 
       try {
-        const r = await jsonp({ action: 'admin_list', adminKey: adminKey, filter: 'pending' });
+        const r = await jsonp({ action: 'admin_dashboard', adminKey: adminKey, ts: Date.now() });
         if (!r.ok) throw new Error(apiErrorMessage(r));
-        const items = r.data && r.data.items;
+        const data = r.data || {};
+        ['pending', 'confirmed', 'today', 'released'].forEach(k => adminLocalCacheSet(k, data[k] || []));
         sessionStorage.setItem('choco_admin_key', adminKey);
-        adminLocalCacheSet('pending', items);
-        render(items);
+        render(data[filter] || []);
       } catch (e) {
         const msg = e.message;
         const authError = /unauthorized|forbidden/i.test(msg);
         if (authError) {
-          dashboard.style.display = 'none';
-          login.style.display = 'block';
+          fadeSwitch(dashboard, login, 'back');
           sessionStorage.removeItem('choco_admin_key');
           adminKey = '';
-        } else {
-          dashboard.style.display = 'block';
-          login.style.display = 'none';
         }
         toast(authError ? '密碼錯誤' : msg);
       }
@@ -402,30 +433,35 @@
       } catch {}
     }
 
-    async function load() {
-      const seq = ++adminLoadSeq;
-      const list = $('list');
-      const cached = adminLocalCacheGet(filter);
-
+    function renderFilter(f) {
+      const cached = adminLocalCacheGet(f);
       if (cached) {
         render(cached);
-      } else {
-        list.innerHTML = '<div class="loading">載入中…</div>';
+        return true;
       }
+      return false;
+    }
+
+    // 後台四個分頁（待訂金／已確認／今日／已釋放）原本每切一次分頁就要打一次
+    // admin_list API；現在後端 admin_dashboard 會一次把四個分類都算好回傳，
+    // 前端存進 sessionStorage 快取後，切分頁只是讀本地資料、幾乎不用等待。
+    async function loadDashboard() {
+      const seq = ++adminLoadSeq;
+      const list = $('list');
+      const hasCache = renderFilter(filter);
+      if (!hasCache) list.innerHTML = '<div class="loading">載入中…</div>';
 
       try {
-        const r = await jsonp({ action: 'admin_list', adminKey: adminKey, filter: filter });
+        const r = await jsonp({ action: 'admin_dashboard', adminKey: adminKey, ts: Date.now() });
         if (seq !== adminLoadSeq) return;
-        if (!r.ok) {
-          throw new Error(apiErrorMessage(r));
-        }
-        const items = r.data && r.data.items;
-        adminLocalCacheSet(filter, items);
-        render(items);
+        if (!r.ok) throw new Error(apiErrorMessage(r));
+        const data = r.data || {};
+        ['pending', 'confirmed', 'today', 'released'].forEach(k => adminLocalCacheSet(k, data[k] || []));
+        render(data[filter] || []);
       } catch (e) {
         if (seq !== adminLoadSeq) return;
-        if (!cached) {
-          list.innerHTML = '<div class="empty">' + escapeHtml(e.message) + '<br><button class="btn restore" style="margin-top: 12px;" onclick="load()">重新載入</button></div>';
+        if (!hasCache) {
+          list.innerHTML = '<div class="empty">' + escapeHtml(e.message) + '<br><button class="btn restore" style="margin-top: 12px;" onclick="loadDashboard()">重新載入</button></div>';
         } else {
           toast(e.message);
         }
@@ -436,7 +472,11 @@
       filter = f;
       document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
       el.classList.add('active');
-      load();
+      // 四個分類已經在 loadDashboard() 一次抓回來了，切分頁優先讀快取，
+      // 只有快取還沒建立（例如剛登入資料還沒回來）才會真的打一次 API。
+      if (!renderFilter(f)) {
+        loadDashboard();
+      }
     }
 
     function render(items) {
@@ -508,7 +548,7 @@
         if (!r.ok) throw new Error(apiErrorMessage(r));
         const msg = [r.data && r.data.message, r.data && r.data.lineNotice].filter(Boolean).join('\n');
         toast(msg || '操作成功');
-        await load();
+        await loadDashboard();
       } catch (e) {
         toast(e.message);
       }
@@ -604,10 +644,16 @@
     }
 
     function showManagerPage(page) {
+      if (managerPage === page) return;
+
+      const pages = { bookings: $('bookingsPage'), vacation: $('vacationPage'), services: $('servicesPage') };
+      const order = ['bookings', 'vacation', 'services'];
+      const dir = order.indexOf(page) > order.indexOf(managerPage) ? 'fwd' : 'back';
+      const hideEl = pages[managerPage];
+
       managerPage = page;
-      $('bookingsPage').classList.toggle('hidden', page !== 'bookings');
-      $('vacationPage').classList.toggle('hidden', page !== 'vacation');
-      $('servicesPage').classList.toggle('hidden', page !== 'services');
+      fadeSwitch(hideEl, pages[page], dir);
+
       $('navBookings').classList.toggle('active', page === 'bookings');
       $('navVacation').classList.toggle('active', page === 'vacation');
       $('navServices').classList.toggle('active', page === 'services');
@@ -809,7 +855,7 @@
     if (adminKey) {
       $('login').style.display = 'none';
       $('dashboard').style.display = 'block';
-      load();
+      loadDashboard();
     }
   </script>
 </body>
