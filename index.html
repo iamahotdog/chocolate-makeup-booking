@@ -74,6 +74,82 @@
     input[type="date"]::-webkit-date-and-time-value { text-align: left; min-height: 1.2em; }
     .timeGrid { display: grid; grid-template-columns: 1fr 22px 1fr; gap: 7px; align-items: center; }
     .colon { text-align: center; color: #bc8d73; font-weight: 900; }
+
+    /* 預約時段：只顯示真正可預約的時間，避免大量 disabled 下拉選項造成誤解 */
+    .timePicker { min-height: 78px; }
+    .timeState {
+      padding: 14px 15px;
+      border: 1px solid #ead7cc;
+      border-radius: 15px;
+      background: #fffaf7;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.65;
+      text-align: center;
+    }
+    .timeState.bad {
+      background: var(--red);
+      border-color: #efd5cf;
+      color: var(--redInk);
+    }
+    .timeSkeleton {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+    .timeSkeleton span {
+      height: 43px;
+      border-radius: 13px;
+      background: linear-gradient(90deg, #f7eee9 25%, #fffaf7 50%, #f7eee9 75%);
+      background-size: 200% 100%;
+      animation: timeShimmer 1.15s infinite linear;
+    }
+    @keyframes timeShimmer {
+      from { background-position: 200% 0; }
+      to { background-position: -200% 0; }
+    }
+    .timeGroup + .timeGroup { margin-top: 14px; }
+    .timeGroupTitle {
+      margin: 0 0 8px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .03em;
+    }
+    .timeSlots {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .timeSlot {
+      min-width: 0;
+      border: 1px solid #dfc8bb;
+      border-radius: 13px;
+      padding: 11px 6px;
+      background: #fff;
+      color: var(--ink);
+      font-size: 13px;
+      font-weight: 800;
+      text-align: center;
+      transition: transform .08s ease, background .12s ease, border-color .12s ease, color .12s ease;
+    }
+    .timeSlot:active { transform: scale(.97); }
+    .timeSlot.selected {
+      border-color: var(--brown);
+      background: linear-gradient(#7b5039, #613928);
+      color: #fff;
+      box-shadow: 0 3px 0 #46291e;
+    }
+    .timePicked {
+      margin-top: 10px;
+      padding: 10px 12px;
+      border-radius: 13px;
+      background: var(--green);
+      color: var(--greenInk);
+      font-size: 11.5px;
+      font-weight: 750;
+      text-align: center;
+    }
     .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     .counterLabel { font-size: 10.5px; color: var(--muted); margin-bottom: 5px; }
     .counter { display: grid; grid-template-columns: 40px 1fr 40px; border: 1px solid #dfc8bb; border-radius: 14px; overflow: hidden; background: #fff; }
@@ -261,16 +337,34 @@
 
           <div id="timeField" class="field">
             <label class="requiredLabel">希望幾點開始？</label>
-            <div class="timeGrid">
-              <select id="hour" class="control" required>
-                <option value="">時</option>
-              </select>
-              <div class="colon">:</div>
-              <select id="minute" class="control" required>
-                <option value="">分</option>
-              </select>
+
+            <div id="timePicker" class="timePicker">
+              <div id="timeEmptyState" class="timeState">請先選擇日期，就會顯示目前可預約的時間 ♡</div>
+
+              <div id="timeLoadingState" class="hidden" aria-live="polite">
+                <div class="timeSkeleton" aria-hidden="true">
+                  <span></span><span></span><span></span>
+                </div>
+                <div class="fieldHint" style="text-align:center; margin-top:8px;">正在確認這天的可預約時段 ♡</div>
+              </div>
+
+              <div id="timeOptions" class="hidden">
+                <div id="morningTimeGroup" class="timeGroup hidden">
+                  <div class="timeGroupTitle">上午</div>
+                  <div id="morningTimeSlots" class="timeSlots"></div>
+                </div>
+                <div id="laterTimeGroup" class="timeGroup hidden">
+                  <div class="timeGroupTitle">下午／晚上</div>
+                  <div id="laterTimeSlots" class="timeSlots"></div>
+                </div>
+                <div id="timePicked" class="timePicked hidden"></div>
+              </div>
+
+              <div id="timeUnavailableState" class="timeState bad hidden"></div>
             </div>
-            <div class="fieldHint">平日 10:00後至14:00前暫不開放預約，14:00 後重新開放；假日全時段開放。</div>
+
+            <input id="selectedStartTime" type="hidden">
+            <div class="fieldHint">以下僅顯示目前可預約時段。平日 10:00 後至 14:00 前暫不開放預約。</div>
           </div>
 
           <div id="peopleFields" class="field">
@@ -587,51 +681,40 @@
     }
 
     function initForm() {
-      const hour = $('hour');
-      const minute = $('minute');
-
-      hour.innerHTML = '<option value="">時</option>';
-      minute.innerHTML = '<option value="">分</option>';
-      hour.disabled = true;
-      minute.disabled = true;
-
       $('date').value = '';
+      $('selectedStartTime').value = '';
       if ($('dateDisplay')) $('dateDisplay').textContent = '請選擇日期';
+      renderTimePickerIdle();
 
       $('date').addEventListener('change', async () => {
         if (!validateLessonDate()) return;
         if (!validateBookingDateFromUser()) return;
-        if ($('dateDisplay')) $('dateDisplay').textContent = $('date').value.replace(/-/g, '/');
 
-        if (serviceId !== 'lesson') {
-          $('hour').value = '';
-          $('minute').value = '';
+        if ($('dateDisplay')) {
+          $('dateDisplay').textContent = $('date').value.replace(/-/g, '/');
         }
 
+        clearSelectedTime();
         notice('', '');
-        updateTimeOptions();
 
-        if (!currentDayOccupancy || currentDayOccupancy.date !== $('date').value) {
-          const hydrated = hydrateDayOccupancyFromMonthCache($('date').value);
-          if (!hydrated) {
-            setTimeControlsLoading(true);
-            notice('', '正在讀取這天可預約的時間…');
-            await loadDayOccupancy(true);
-          }
+        if (serviceId === 'lesson') {
+          // 教學固定 11:00，不顯示一般時段按鈕。
+          $('selectedStartTime').value = '11:00';
+          await ensureDateOccupancyReady();
+          scheduleCheck();
+          return;
         }
 
-        refreshAllowedTimeOptions();
-        scheduleCheck();
-      });
+        // 月曆已有完整月資料時可以立即顯示時段；沒有才進入骨架 loading。
+        const hydrated = hydrateDayOccupancyFromMonthCache($('date').value);
+        if (hydrated) {
+          renderAvailableTimeButtons();
+          return;
+        }
 
-      $('hour').addEventListener('change', () => {
-        $('minute').value = '';
-        refreshAllowedTimeOptions();
-        scheduleCheck();
-      });
-
-      $('minute').addEventListener('change', () => {
-        scheduleCheck();
+        renderTimePickerLoading();
+        await loadDayOccupancy(true);
+        renderAvailableTimeButtons();
       });
     }
 
@@ -905,8 +988,7 @@
       $('date').value = dateKey;
       $('dateDisplay').textContent = dateKey.replace(/-/g, '/');
       currentDayOccupancy = null;
-      $('hour').value = '';
-      $('minute').value = '';
+      clearSelectedTime();
 
       // 月曆資料若已經完整，就直接拿來產生時間，不再多打一支 API。
       hydrateDayOccupancyFromMonthCache(dateKey);
@@ -931,8 +1013,7 @@
       }
 
       el.value = minDate;
-      $('hour').value = '';
-      $('minute').value = '00';
+      clearSelectedTime();
       if (!suppressDateModal) {
         suppressDateModal = true;
         showBrandModal('日期已調整', '今天的魔法時段已經收單囉🪄 請幫我選明天之後的日期。', '🪄', '好的', null, () => { suppressDateModal = false; });
@@ -968,7 +1049,7 @@
 
     function validateNotPast() {
       if (!preventPastDate()) return false;
-      if (!('date').value || !selectedTime()) return true;
+      if (!$('date').value || !selectedTime()) return true;
       const selected = new Date($('date').value + 'T' + selectedTime() + ':00');
       const now = new Date();
       if (selected.getTime() <= now.getTime()) {
@@ -1151,20 +1232,21 @@
       if ($('weddingLightPhotoHintBtn')) $('weddingLightPhotoHintBtn').classList.toggle('hidden', id !== 'wedding');
       if ($('photoHintBlock')) $('photoHintBlock').classList.toggle('hidden', id === 'lesson');
 
+      clearSelectedTime();
       if (id === 'lesson') {
-        $('hour').value = '11';
-        $('minute').value = '00';
-      } else {
-        $('hour').value = '';
-        $('minute').value = '';
+        $('selectedStartTime').value = '11:00';
       }
 
       toggleArea();
       syncConditionalRequired();
       preloadBookingCalendarData();
       currentDayOccupancy = null;
-      refreshAllowedTimeOptions();
-      notice('', '請先選擇日期，再選擇可預約時間。');
+      if (id === 'lesson') {
+        notice('', '1 對 1 美妝教學固定於 11:00 開始，15:00 結束 ♡');
+      } else {
+        renderTimePickerIdle();
+        notice('', '');
+      }
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
@@ -1264,13 +1346,18 @@
       const cached = dayOccupancyCache[key];
       if (cached && !force && Date.now() - cached.ts < 60000) {
         currentDayOccupancy = cached.data;
-        refreshAllowedTimeOptions();
+        if (serviceId !== 'lesson') renderAvailableTimeButtons();
         return currentDayOccupancy;
       }
 
       const seq = ++occupancySeq;
       try {
-        const r = await jsonp({ action: 'day_occupancy', date: date, ts: Date.now() }, 9000, 2);
+        const r = await jsonp(
+          { action: 'day_occupancy', date: date, ts: Date.now() },
+          9000,
+          2
+        );
+
         if (seq !== occupancySeq) return null;
         if (!r || r.ok === false) throw new Error('invalid occupancy');
 
@@ -1279,19 +1366,19 @@
 
         currentDayOccupancy = occ;
         dayOccupancyCache[key] = { ts: Date.now(), data: occ };
-        refreshAllowedTimeOptions();
 
+        if (serviceId !== 'lesson') renderAvailableTimeButtons();
         if (selectedTime()) scheduleCheck();
         if (serviceId === 'lesson') scheduleCheck();
+
         return occ;
       } catch (e) {
         console.warn('day occupancy failed', e);
-        setTimeControlsLoading(false);
-        $('hour').innerHTML = '<option value="">時</option>';
-        $('minute').innerHTML = '<option value="">分</option>';
-        $('hour').disabled = false;
-        $('minute').disabled = true;
-        notice('', '可預約時間讀取較慢，請重新選擇日期再試一次。');
+
+        if (serviceId !== 'lesson') {
+          renderTimePickerUnavailable('目前無法取得這天的可預約時間，請稍後再點一次日期。');
+        }
+        notice('', '');
         return null;
       }
     }
@@ -1311,116 +1398,147 @@
       return isAllowedStartTime(time, dateValue) && !overlapsOccupied(time);
     }
 
-    function setTimeControlsLoading(loading) {
-      const hourEl = $('hour');
-      const minuteEl = $('minute');
-      if (!hourEl || !minuteEl) return;
-      hourEl.disabled = !!loading;
-      minuteEl.disabled = !!loading;
-
-      if (loading) {
-        hourEl.innerHTML = '<option value="">讀取中…</option>';
-        minuteEl.innerHTML = '<option value="">分</option>';
+    function clearSelectedTime() {
+      if ($('selectedStartTime')) $('selectedStartTime').value = '';
+      document.querySelectorAll('.timeSlot.selected').forEach(x => x.classList.remove('selected'));
+      if ($('timePicked')) {
+        $('timePicked').classList.add('hidden');
+        $('timePicked').textContent = '';
       }
     }
 
-    function availableMinutesForHour(hour) {
-      const result = [];
-      if (!$('date').value || !currentDayOccupancy || currentDayOccupancy.date !== $('date').value) return result;
-
-      for (let m = 0; m < 60; m += 5) {
-        const time = String(hour).padStart(2, '0') + ':' + String(m).padStart(2, '0');
-        if (isSelectableStartTime(time, $('date').value)) result.push(m);
-      }
-      return result;
+    function renderTimePickerIdle() {
+      clearSelectedTime();
+      $('timeEmptyState').classList.remove('hidden');
+      $('timeLoadingState').classList.add('hidden');
+      $('timeOptions').classList.add('hidden');
+      $('timeUnavailableState').classList.add('hidden');
     }
 
-    function refreshAllowedTimeOptions() {
-      const hourEl = $('hour');
-      const minuteEl = $('minute');
-      if (!hourEl || !minuteEl) return;
+    function renderTimePickerLoading() {
+      clearSelectedTime();
+      $('timeEmptyState').classList.add('hidden');
+      $('timeLoadingState').classList.remove('hidden');
+      $('timeOptions').classList.add('hidden');
+      $('timeUnavailableState').classList.add('hidden');
+    }
 
-      if (serviceId === 'lesson') {
-        hourEl.innerHTML = '<option value="11">11</option>';
-        minuteEl.innerHTML = '<option value="00">00</option>';
-        hourEl.value = '11';
-        minuteEl.value = '00';
-        hourEl.disabled = true;
-        minuteEl.disabled = true;
-        return;
+    function renderTimePickerUnavailable(message) {
+      clearSelectedTime();
+      $('timeEmptyState').classList.add('hidden');
+      $('timeLoadingState').classList.add('hidden');
+      $('timeOptions').classList.add('hidden');
+      $('timeUnavailableState').classList.remove('hidden');
+      $('timeUnavailableState').textContent = message || '這天目前已無可預約時段，請換其他日期看看 ♡';
+    }
+
+    async function ensureDateOccupancyReady() {
+      const date = $('date').value;
+      if (!date) return false;
+      if (currentDayOccupancy && currentDayOccupancy.date === date) return true;
+
+      const hydrated = hydrateDayOccupancyFromMonthCache(date);
+      if (hydrated) return true;
+
+      const result = await loadDayOccupancy(true);
+      return !!result;
+    }
+
+    function buildAvailableStartTimes() {
+      const date = $('date').value;
+      if (!date || !currentDayOccupancy || currentDayOccupancy.date !== date) return [];
+
+      // 採 30 分鐘為顧客選擇間距；實際占用仍依服務完整時長 + 30 分 buffer 計算。
+      const slots = [];
+      for (let mins = 0; mins < 1440; mins += 30) {
+        const h = String(Math.floor(mins / 60)).padStart(2, '0');
+        const m = String(mins % 60).padStart(2, '0');
+        const time = h + ':' + m;
+        if (isSelectableStartTime(time, date)) slots.push(time);
       }
+      return slots;
+    }
+
+    function timeButtonHtml(time) {
+      return `<button type="button" class="timeSlot" data-time="${time}" onclick="selectStartTime('${time}', this)">${time}</button>`;
+    }
+
+    function renderAvailableTimeButtons() {
+      if (serviceId === 'lesson') return;
 
       const date = $('date').value;
       if (!date) {
-        hourEl.innerHTML = '<option value="">時</option>';
-        minuteEl.innerHTML = '<option value="">分</option>';
-        hourEl.disabled = true;
-        minuteEl.disabled = true;
+        renderTimePickerIdle();
         return;
       }
 
       if (!currentDayOccupancy || currentDayOccupancy.date !== date) {
-        setTimeControlsLoading(true);
+        renderTimePickerLoading();
         return;
       }
 
       if (currentDayOccupancy.closedDay) {
-        hourEl.innerHTML = '<option value="">無可預約時間</option>';
-        minuteEl.innerHTML = '<option value="">分</option>';
-        hourEl.disabled = true;
-        minuteEl.disabled = true;
-        notice('bad', '這天目前不開放預約，請換其他日期看看 ♡');
+        renderTimePickerUnavailable('這天目前不開放預約，請換其他日期看看 ♡');
         return;
       }
 
-      const previousHour = hourEl.value;
-      const previousMinute = minuteEl.value;
-      const availableHours = [];
+      const previous = selectedTime();
+      const slots = buildAvailableStartTimes();
 
-      for (let h = 0; h < 24; h++) {
-        if (availableMinutesForHour(h).length) availableHours.push(h);
-      }
-
-      if (!availableHours.length) {
-        hourEl.innerHTML = '<option value="">已無可預約時間</option>';
-        minuteEl.innerHTML = '<option value="">分</option>';
-        hourEl.disabled = true;
-        minuteEl.disabled = true;
-        notice('bad', '這天目前已無可預約時段，請換其他日期看看 ♡');
+      if (!slots.length) {
+        renderTimePickerUnavailable('這天目前已無可預約時段，請換其他日期看看 ♡');
         return;
       }
 
-      hourEl.disabled = false;
-      hourEl.innerHTML = '<option value="">時</option>' + availableHours.map(h => {
-        const v = String(h).padStart(2, '0');
-        return '<option value="' + v + '">' + v + '</option>';
-      }).join('');
+      const morning = slots.filter(t => Number(t.slice(0, 2)) < 12);
+      const later = slots.filter(t => Number(t.slice(0, 2)) >= 12);
 
-      if (previousHour && availableHours.includes(Number(previousHour))) {
-        hourEl.value = previousHour;
-      }
+      $('timeEmptyState').classList.add('hidden');
+      $('timeLoadingState').classList.add('hidden');
+      $('timeUnavailableState').classList.add('hidden');
+      $('timeOptions').classList.remove('hidden');
 
-      const selectedHour = hourEl.value;
-      minuteEl.innerHTML = '<option value="">分</option>';
+      $('morningTimeGroup').classList.toggle('hidden', !morning.length);
+      $('laterTimeGroup').classList.toggle('hidden', !later.length);
+      $('morningTimeSlots').innerHTML = morning.map(timeButtonHtml).join('');
+      $('laterTimeSlots').innerHTML = later.map(timeButtonHtml).join('');
 
-      if (!selectedHour) {
-        minuteEl.disabled = true;
-        notice('', '');
-        return;
-      }
-
-      const mins = availableMinutesForHour(Number(selectedHour));
-      minuteEl.disabled = false;
-      minuteEl.innerHTML = '<option value="">分</option>' + mins.map(m => {
-        const v = String(m).padStart(2, '0');
-        return '<option value="' + v + '">' + v + '</option>';
-      }).join('');
-
-      if (previousMinute && mins.includes(Number(previousMinute))) {
-        minuteEl.value = previousMinute;
+      if (previous && slots.includes(previous)) {
+        const btn = document.querySelector('.timeSlot[data-time="' + previous + '"]');
+        if (btn) selectStartTime(previous, btn, false);
+      } else {
+        clearSelectedTime();
       }
 
       notice('', '');
+    }
+
+    function selectStartTime(time, button, runCheck = true) {
+      document.querySelectorAll('.timeSlot.selected').forEach(x => x.classList.remove('selected'));
+      if (button) button.classList.add('selected');
+
+      $('selectedStartTime').value = time;
+
+      const endTime = addMinutesToTime(time, estimateServiceMinutesLocal());
+      if (endTime) {
+        $('timePicked').textContent = '已選 ' + time + '・預計約 ' + endTime + ' 結束';
+        $('timePicked').classList.remove('hidden');
+      } else {
+        $('timePicked').classList.add('hidden');
+      }
+
+      if (runCheck) scheduleCheck();
+    }
+
+    // 舊程式其他地方仍會呼叫這個名稱，統一導向新的按鈕 UI。
+    function refreshAllowedTimeOptions() {
+      renderAvailableTimeButtons();
+    }
+
+    function setTimeControlsLoading(loading) {
+      if (loading) renderTimePickerLoading();
+      else if ($('date').value) renderAvailableTimeButtons();
+      else renderTimePickerIdle();
     }
 
     function estimateServiceMinutesLocal() {
@@ -1442,10 +1560,7 @@
 
     function selectedTime() {
       if (serviceId === 'lesson') return '11:00';
-      const h = $('hour').value;
-      const m = $('minute').value;
-      if (!h || m === '') return '';
-      return h + ':' + m;
+      return $('selectedStartTime') ? $('selectedStartTime').value : '';
     }
 
     function payload() {
@@ -1617,7 +1732,7 @@
       const missing = [];
 
       if (!$('date').value) missing.push('日期');
-      if (serviceId !== 'lesson' && (!$('hour').value || !$('minute').value)) missing.push('時間');
+      if (serviceId !== 'lesson' && !selectedTime()) missing.push('時間');
       if (!$('name').value.trim()) missing.push('姓名');
       if (!$('location').value) missing.push(serviceId === 'lesson' ? '學習地點' : '開妝地點');
 
