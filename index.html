@@ -132,6 +132,25 @@
     .bookingSuccessToast { position: fixed; left: 50%; top: calc(14px + env(safe-area-inset-top)); z-index: 999; width: calc(100% - 32px); max-width: 398px; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px 14px; border: 1px solid #dfc4b6; border-radius: 15px; background: #fff8f3; color: #6d4230; font-size: 12.5px; font-weight: 800; box-shadow: 0 10px 28px rgba(75,44,30,.16); opacity: 0; transform: translate(-50%, -18px); pointer-events: none; transition: opacity .2s ease, transform .2s ease; }
     .bookingSuccessToast.show { opacity: 1; transform: translate(-50%, 0); }
     .bookingSuccessDot { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: #ead9cf; color: #6d4230; }
+
+    .datePickerBtn { display:flex; align-items:center; justify-content:space-between; text-align:left; cursor:pointer; }
+    .datePickerBtn:disabled { opacity:.6; cursor:not-allowed; }
+    .calendarModal { position:fixed; inset:0; z-index:2147483200; display:none; align-items:center; justify-content:center; padding:18px; background:rgba(52,34,25,.48); backdrop-filter:blur(3px); -webkit-backdrop-filter:blur(3px); }
+    .calendarModal.show { display:flex; }
+    .calendarCard { width:min(100%,360px); padding:18px; border:1px solid var(--line); border-radius:22px; background:#fffdfb; box-shadow:0 24px 70px rgba(50,30,21,.25); }
+    .calendarHead { display:grid; grid-template-columns:42px 1fr 42px; align-items:center; gap:8px; margin-bottom:12px; }
+    .calendarHead button { border:0; border-radius:12px; padding:8px; background:#f8eee8; color:var(--brown); font-size:20px; }
+    .calendarTitle { text-align:center; font-weight:850; font-size:17px; }
+    .calendarWeek, .calendarDays { display:grid; grid-template-columns:repeat(7,1fr); gap:6px; }
+    .calendarWeek { margin-bottom:6px; color:var(--muted); font-size:10px; text-align:center; }
+    .calendarDay { aspect-ratio:1/1; border:1px solid #eee0d7; border-radius:11px; background:#fff; color:var(--ink); font-weight:750; }
+    .calendarDay.today { outline:1px solid #c89d86; }
+    .calendarDay.selected { background:var(--brown); color:#fff; border-color:var(--brown); }
+    .calendarDay.disabled { background:#f2efed; color:#c5b9b2; border-color:#eee8e4; text-decoration:line-through; cursor:not-allowed; }
+    .calendarDay.blank { visibility:hidden; }
+    .calendarHint { margin-top:10px; color:var(--muted); font-size:10.5px; line-height:1.5; text-align:center; }
+    .calendarClose { width:100%; margin-top:12px; border:0; border-radius:13px; padding:11px; background:#f4ece7; color:var(--brown); font-weight:800; }
+
   </style>
 </head>
 <body>
@@ -208,7 +227,11 @@
         <div class="formBody">
           <div class="field">
             <label class="requiredLabel">想預約哪一天？</label>
-            <input id="date" class="control" type="date" aria-label="預約日期" required>
+            <button id="datePickerBtn" type="button" class="control datePickerBtn" onclick="openBookingCalendar()" aria-label="選擇預約日期">
+              <span id="dateDisplay">請選擇日期</span>
+              <span aria-hidden="true">📅</span>
+            </button>
+            <input id="date" type="hidden" required>
           </div>
 
           <div id="timeField" class="field">
@@ -222,7 +245,7 @@
                 <option value="">分</option>
               </select>
             </div>
-            <div class="fieldHint">平日開妝時間可選至 10:00，14:00 後重新開放；假日全時段開放。</div>
+            <div class="fieldHint">平日 10:10–13:55 暫不開放，14:00 後重新開放；假日全時段開放。</div>
           </div>
 
           <div id="peopleFields" class="field">
@@ -392,6 +415,21 @@
     </div>
   </main>
 
+
+  <div id="bookingCalendar" class="calendarModal" role="dialog" aria-modal="true" aria-label="選擇預約日期">
+    <div class="calendarCard">
+      <div class="calendarHead">
+        <button type="button" onclick="shiftBookingCalendar(-1)">‹</button>
+        <div id="bookingCalendarTitle" class="calendarTitle"></div>
+        <button type="button" onclick="shiftBookingCalendar(1)">›</button>
+      </div>
+      <div class="calendarWeek"><span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span></div>
+      <div id="bookingCalendarDays" class="calendarDays"></div>
+      <div class="calendarHint">灰色日期目前無法預約；休假日與不符合服務規則的日期會自動停用。</div>
+      <button type="button" class="calendarClose" onclick="closeBookingCalendar()">取消</button>
+    </div>
+  </div>
+
   <div id="brandModal" class="brandModal" role="dialog" aria-modal="true" aria-labelledby="brandModalTitle">
     <div class="brandModalCard">
       <h3 id="brandModalTitle" class="brandModalTitle"></h3>
@@ -536,13 +574,16 @@
       const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
       const localTomorrow = tomorrow.getFullYear() + '-' + String(tomorrow.getMonth() + 1).padStart(2, '0') + '-' + String(tomorrow.getDate()).padStart(2, '0');
 
-      $('date').min = localTomorrow;
-      $('date').value = localTomorrow;
+      $('date').value = '';
+      if ($('dateDisplay')) $('dateDisplay').textContent = '請選擇日期';
 
       $('date').addEventListener('change', () => {
         if (!validateLessonDate()) return;
         if (!validateBookingDateFromUser()) return;
+        if ($('dateDisplay')) $('dateDisplay').textContent = $('date').value.replace(/-/g, '/');
+        currentDayOccupancy = null;
         updateTimeOptions();
+        loadDayOccupancy(true);
         refreshAllowedTimeOptions();
         scheduleCheck();
       });
@@ -563,6 +604,113 @@
 
     function localDateString(d) {
       return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    }
+
+
+    let bookingCalendarCursor = new Date();
+    let publicClosedDaysCache = {};
+
+    function monthKeyFromDate(d) {
+      return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+    }
+
+    async function getPublicClosedDays(month) {
+      if (publicClosedDaysCache[month]) return publicClosedDaysCache[month];
+      try {
+        const r = await jsonp({ action: 'public_closed_days', month: month, ts: Date.now() }, 9000, 2);
+        const dates = r && r.data && Array.isArray(r.data.dates) ? r.data.dates : [];
+        publicClosedDaysCache[month] = new Set(dates);
+        return publicClosedDaysCache[month];
+      } catch (e) {
+        console.warn('closed days load failed', e);
+        publicClosedDaysCache[month] = new Set();
+        return publicClosedDaysCache[month];
+      }
+    }
+
+    async function openBookingCalendar() {
+      const base = $('date').value
+        ? new Date($('date').value + 'T12:00:00')
+        : new Date();
+      bookingCalendarCursor = new Date(base.getFullYear(), base.getMonth(), 1);
+      $('bookingCalendar').classList.add('show');
+      document.body.classList.add('modalOpen');
+      await renderBookingCalendar();
+    }
+
+    function closeBookingCalendar() {
+      $('bookingCalendar').classList.remove('show');
+      document.body.classList.remove('modalOpen');
+    }
+
+    async function shiftBookingCalendar(delta) {
+      bookingCalendarCursor = new Date(
+        bookingCalendarCursor.getFullYear(),
+        bookingCalendarCursor.getMonth() + delta,
+        1
+      );
+      await renderBookingCalendar();
+    }
+
+    async function renderBookingCalendar() {
+      const y = bookingCalendarCursor.getFullYear();
+      const m = bookingCalendarCursor.getMonth();
+      const month = y + '-' + String(m + 1).padStart(2, '0');
+      const closed = await getPublicClosedDays(month);
+
+      $('bookingCalendarTitle').textContent = y + ' 年 ' + (m + 1) + ' 月';
+      const box = $('bookingCalendarDays');
+      box.innerHTML = '';
+
+      const firstDay = new Date(y, m, 1).getDay();
+      const daysInMonth = new Date(y, m + 1, 0).getDate();
+
+      for (let i = 0; i < firstDay; i++) {
+        const blank = document.createElement('button');
+        blank.type = 'button';
+        blank.className = 'calendarDay blank';
+        blank.tabIndex = -1;
+        box.appendChild(blank);
+      }
+
+      const now = new Date();
+      const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+      tomorrow.setHours(0, 0, 0, 0);
+      const todayKey = localDateString(now);
+
+      for (let day = 1; day <= daysInMonth; day++) {
+        const d = new Date(y, m, day);
+        const dateKey = localDateString(d);
+        const weekday = d.getDay();
+        const beforeTomorrow = d.getTime() < tomorrow.getTime();
+        const serviceRuleDisabled = serviceId === 'lesson' && weekday !== 0 && weekday !== 6;
+        const isClosed = closed.has(dateKey);
+        const disabled = beforeTomorrow || serviceRuleDisabled || isClosed;
+
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'calendarDay'
+          + (disabled ? ' disabled' : '')
+          + (dateKey === todayKey ? ' today' : '')
+          + ($('date').value === dateKey ? ' selected' : '');
+        btn.textContent = String(day);
+        btn.disabled = disabled;
+
+        if (!disabled) {
+          btn.onclick = () => selectBookingDate(dateKey);
+        } else if (isClosed) {
+          btn.title = '休假日';
+        }
+
+        box.appendChild(btn);
+      }
+    }
+
+    function selectBookingDate(dateKey) {
+      $('date').value = dateKey;
+      $('dateDisplay').textContent = dateKey.replace(/-/g, '/');
+      $('date').dispatchEvent(new Event('change'));
+      closeBookingCalendar();
     }
 
     function validateBookingDateFromUser() {
@@ -918,7 +1066,8 @@
       if (day === 0 || day === 6) return true;
       const [h, m] = time.split(':').map(Number);
       const mins = h * 60 + m;
-      return mins <= 600 || mins >= 840;
+      // 平日 10:10–13:55 不開放；10:00、10:05 與 14:00 後可選。
+      return mins <= 605 || mins >= 840;
     }
 
     let dayOccupancyCache = {};
@@ -1021,7 +1170,10 @@
 
     function selectedTime() {
       if (serviceId === 'lesson') return '11:00';
-      return $('hour').value + $('minute').value ? $('hour').value + ':' + $('minute').value : '';
+      const h = $('hour').value;
+      const m = $('minute').value;
+      if (!h || m === '') return '';
+      return h + ':' + m;
     }
 
     function payload() {
@@ -1137,14 +1289,17 @@
       notice('ok', '預計結束時間：' + endTime);
     }
 
-    async function postForm(data) {
+    function postForm(data) {
       const body = new URLSearchParams();
       Object.entries(data).forEach(([k, v]) => {
         body.append(k, String(v ?? ''));
       });
-      await fetch(API_URL, {
+      // 不等待 Apps Script 整個 doPost（包含 LINE push）完成。
+      // Request 一送出就開始輪詢狀態，避免按鈕長時間卡在「處理中」。
+      return fetch(API_URL, {
         method: 'POST',
         mode: 'no-cors',
+        keepalive: true,
         body
       });
     }
@@ -1161,17 +1316,17 @@
     }
 
     async function pollStatus(requestId) {
-      const waits = [0, 500, 1000, 1800];
+      const waits = [350, 700, 1200, 1800, 2600, 3800];
       for (const wait of waits) {
-        if (wait) await new Promise(r => setTimeout(r, wait));
-        const s = await jsonp({ action: 'status', requestId: requestId });
+        await new Promise(r => setTimeout(r, wait));
+        const s = await jsonp({ action: 'status', requestId: requestId }, 9000, 2);
         if (s.status === 'success') {
           if (s.perf) console.log('booking performance', s.perf);
           return s;
         }
         if (s.status === 'error') throw new Error(s.message || '預約失敗');
       }
-      throw new Error('預約處理逾時');
+      throw new Error('預約處理較久，請先不要重複送出；稍後重新開啟頁面即可確認。');
     }
 
     function validateRequiredFields() {
@@ -1308,11 +1463,16 @@
 
       try {
         console.log('BOOKING POST START', p.requestId);
-        await postForm(p);
-        console.log('BOOKING POST DONE', p.requestId);
+        const postPromise = postForm(p).catch(err => {
+          console.warn('BOOKING POST NETWORK WARNING', err);
+          return null;
+        });
+        console.log('BOOKING POST SENT', p.requestId);
         notice('', '');
 
+        // 先輪詢，不等 doPost 整支跑完（LINE push 可能較慢）。
         const r = await pollStatus(p.requestId);
+        await Promise.race([postPromise, new Promise(resolve => setTimeout(resolve, 500))]);
         console.log('BOOKING STATUS SUCCESS', { requestId: p.requestId, bookingId: r.id });
         finalizeBookingSuccess(r, p);
       } catch (e) {
