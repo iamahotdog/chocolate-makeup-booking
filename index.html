@@ -150,6 +150,9 @@
     .calendarDay.blank { visibility:hidden; }
     .calendarHint { margin-top:10px; color:var(--muted); font-size:10.5px; line-height:1.5; text-align:center; }
     .calendarClose { width:100%; margin-top:12px; border:0; border-radius:13px; padding:11px; background:#f4ece7; color:var(--brown); font-weight:800; }
+    .calendarLoading { grid-column:1 / -1; min-height:210px; display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:12px; line-height:1.6; text-align:center; }
+    .calendarDay:not(.disabled):active { transform:scale(.96); }
+
 
   </style>
 </head>
@@ -425,7 +428,7 @@
       </div>
       <div class="calendarWeek"><span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span></div>
       <div id="bookingCalendarDays" class="calendarDays"></div>
-      <div class="calendarHint">灰色日期目前無法預約；休假日、已無可用時段或不符合服務規則的日期會自動停用。</div>
+      <div class="calendarHint">灰色日期為該時間預約已滿</div>
       <button type="button" class="calendarClose" onclick="closeBookingCalendar()">取消</button>
     </div>
   </div>
@@ -614,14 +617,17 @@
 
     let bookingCalendarCursor = new Date();
     let publicMonthOccupancyCache = {};
+    let bookingCalendarRenderSeq = 0;
+    const MONTH_OCCUPANCY_TTL = 30000;
 
     function monthKeyFromDate(d) {
       return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
     }
 
     async function getPublicMonthOccupancy(month, force = false) {
-      if (!force && publicMonthOccupancyCache[month]) {
-        return publicMonthOccupancyCache[month];
+      const cached = publicMonthOccupancyCache[month];
+      if (!force && cached && Date.now() - cached.ts < MONTH_OCCUPANCY_TTL) {
+        return cached.data;
       }
 
       try {
@@ -631,24 +637,49 @@
           2
         );
 
-        const data = r && r.data ? r.data : null;
-        if (!data) throw new Error('empty month occupancy');
+        const raw = r && r.data ? r.data : null;
+        if (!raw) throw new Error('empty month occupancy');
 
-        const result = {
-          closedDates: new Set(data.closedDates || []),
-          intervalsByDate: data.intervalsByDate || {},
-          version: data.version || 0
+        const data = {
+          closedDates: new Set(raw.closedDates || []),
+          intervalsByDate: raw.intervalsByDate || {},
+          version: raw.version || 0,
+          partial: false
         };
 
-        publicMonthOccupancyCache[month] = result;
-        return result;
+        publicMonthOccupancyCache[month] = { ts: Date.now(), data: data };
+        return data;
       } catch (e) {
         console.warn('month occupancy load failed', e);
-        return {
-          closedDates: new Set(),
-          intervalsByDate: {},
-          version: 0
-        };
+
+        // 若整月占用資訊暫時讀取失敗，至少抓休假日，避免整個月曆空白。
+        try {
+          const fallback = await jsonp(
+            { action: 'public_closed_days', month: month, ts: Date.now() },
+            8500,
+            1
+          );
+          const dates = fallback && fallback.data && Array.isArray(fallback.data.dates)
+            ? fallback.data.dates
+            : [];
+
+          const data = {
+            closedDates: new Set(dates),
+            intervalsByDate: {},
+            version: 0,
+            partial: true
+          };
+          publicMonthOccupancyCache[month] = { ts: Date.now(), data: data };
+          return data;
+        } catch (fallbackErr) {
+          console.warn('closed days fallback failed', fallbackErr);
+          return {
+            closedDates: new Set(),
+            intervalsByDate: {},
+            version: 0,
+            partial: true
+          };
+        }
       }
     }
 
@@ -662,8 +693,7 @@
 
       if (serviceId === 'lesson') {
         if (weekday !== 0 && weekday !== 6) return false;
-        // 11:00–15:00 + 30 分鐘 buffer
-        return !intervalsOverlap(660, 930, intervals);
+        return !intervalsOverlap(660, 930, intervals); // 11:00–15:00 + 30 分 buffer
       }
 
       const duration = estimateServiceMinutesLocal();
@@ -683,6 +713,22 @@
       return false;
     }
 
+    function renderBookingCalendarLoading() {
+      const y = bookingCalendarCursor.getFullYear();
+      const m = bookingCalendarCursor.getMonth();
+      $('bookingCalendarTitle').textContent = y + ' 年 ' + (m + 1) + ' 月';
+      $('bookingCalendarDays').innerHTML =
+        '<div class="calendarLoading">正在讀取可預約日期…</div>';
+    }
+
+    function preloadBookingCalendarData() {
+      const base = $('date').value
+        ? new Date($('date').value + 'T12:00:00')
+        : new Date();
+      const month = monthKeyFromDate(base);
+      getPublicMonthOccupancy(month, false).catch(() => {});
+    }
+
     async function openBookingCalendar() {
       const base = $('date').value
         ? new Date($('date').value + 'T12:00:00')
@@ -691,7 +737,10 @@
       bookingCalendarCursor = new Date(base.getFullYear(), base.getMonth(), 1);
       $('bookingCalendar').classList.add('show');
       document.body.classList.add('modalOpen');
-      await renderBookingCalendar(true);
+
+      // 先立即畫出月份與載入狀態，不讓使用者看到「空白月曆」。
+      renderBookingCalendarLoading();
+      await renderBookingCalendar(false);
     }
 
     function closeBookingCalendar() {
@@ -705,16 +754,28 @@
         bookingCalendarCursor.getMonth() + delta,
         1
       );
+      renderBookingCalendarLoading();
       await renderBookingCalendar(false);
     }
 
     async function renderBookingCalendar(force = false) {
+      const seq = ++bookingCalendarRenderSeq;
       const y = bookingCalendarCursor.getFullYear();
       const m = bookingCalendarCursor.getMonth();
       const month = y + '-' + String(m + 1).padStart(2, '0');
-      const monthOcc = await getPublicMonthOccupancy(month, force);
 
       $('bookingCalendarTitle').textContent = y + ' 年 ' + (m + 1) + ' 月';
+
+      const cached = publicMonthOccupancyCache[month];
+      if (!cached || force || Date.now() - cached.ts >= MONTH_OCCUPANCY_TTL) {
+        $('bookingCalendarDays').innerHTML =
+          '<div class="calendarLoading">正在讀取可預約日期…</div>';
+      }
+
+      const monthOcc = await getPublicMonthOccupancy(month, force);
+      if (seq !== bookingCalendarRenderSeq) return;
+      if (month !== monthKeyFromDate(bookingCalendarCursor)) return;
+
       const box = $('bookingCalendarDays');
       box.innerHTML = '';
 
@@ -740,7 +801,9 @@
         const beforeTomorrow = d.getTime() < tomorrow.getTime();
         const isClosed = monthOcc.closedDates.has(dateKey);
         const intervals = monthOcc.intervalsByDate[dateKey] || [];
-        const noAvailability = !beforeTomorrow && !isClosed
+
+        // fallback 模式只掌握休假日，不能武斷把其他日期判定為滿檔。
+        const noAvailability = !monthOcc.partial && !beforeTomorrow && !isClosed
           ? !dateHasAnyBookableTime(dateKey, intervals)
           : false;
 
@@ -757,10 +820,6 @@
 
         if (!disabled) {
           btn.onclick = () => selectBookingDate(dateKey);
-        } else if (isClosed) {
-          btn.title = '休假日';
-        } else if (noAvailability) {
-          btn.title = '當日已無可預約時段';
         }
 
         box.appendChild(btn);
@@ -1049,6 +1108,7 @@
 
       toggleArea();
       syncConditionalRequired();
+      preloadBookingCalendarData();
       loadDayOccupancy(true);
       refreshAllowedTimeOptions();
       scheduleCheck();
@@ -1468,30 +1528,51 @@
       currentDayOccupancy = null;
 
       $('formPage').style.display = 'none';
-      $('result').innerHTML = `
-        <section class="successWarm">
-          <div class="successHero">
-            <h2>預約資料已成功送出 ♡</h2>
-            <p class="successConfirmed">已收到你的預約申請</p>
-            <p>${displayDate(r.date, r.time)}</p>
-            <p>${names[p.serviceId]}｜${p.name}</p>
-          </div>
-          <div class="successSection">
-            <div class="successSectionTitle">接下來請這樣做：</div>
-            <div class="successSectionBody">
-              <ol>
-                <li>巧克力會盡快確認你的預約時段與報價。</li>
-                <li>確認後會回 LINE 通知你，並告知訂金金額與付款方式。</li>
-                <li>完成訂金後，你的時段就正式保留完成 ♡</li>
-              </ol>
-              <p class="depositRule">
-                <b>訂金規則：</b><br>
-                訂金將保留你的預約時段，若因個人因素取消，訂金恕不退還；若因巧克力因素無法服務，將全額退還。
+
+      if (p.serviceId === 'lesson') {
+        $('result').innerHTML = `
+          <section class="successWarm">
+            <div class="successHero">
+              <h2>預約資料已成功送出 ♡</h2>
+              <p class="successConfirmed">已收到你的預約申請</p>
+              <p>${displayDate(r.date, r.time)}</p>
+              <p>${names[p.serviceId]}｜${p.name}</p>
+            </div>
+            <div class="nextSteps">
+              <h3>接下來的流程</h3>
+              <p style="margin:0; font-size:13px; line-height:1.75;">
+                巧克力會先跟你確認預約時間及地點，收到訂金後會傳課前問答給你 🥨
               </p>
             </div>
-          </div>
-        </section>
-      `;
+          </section>
+        `;
+      } else {
+        $('result').innerHTML = `
+          <section class="successWarm">
+            <div class="successHero">
+              <h2>預約資料已成功送出 ♡</h2>
+              <p class="successConfirmed">已收到你的預約申請</p>
+              <p>${displayDate(r.date, r.time)}</p>
+              <p>${names[p.serviceId]}｜${p.name}</p>
+            </div>
+            <div class="successSection">
+              <div class="successSectionTitle">接下來請這樣做：</div>
+              <div class="successSectionBody">
+                <ol>
+                  <li>巧克力會盡快確認你的預約時段與報價。</li>
+                  <li>確認後會回 LINE 通知你，並告知訂金金額與付款方式。</li>
+                  <li>完成訂金後，你的時段就正式保留完成 ♡</li>
+                </ol>
+                <p class="depositRule">
+                  <b>訂金規則：</b><br>
+                  訂金將保留你的預約時段，若因個人因素取消，訂金恕不退還；若因巧克力因素無法服務，將全額退還。
+                </p>
+              </div>
+            </div>
+          </section>
+        `;
+      }
+
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
