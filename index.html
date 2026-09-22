@@ -886,8 +886,10 @@
         const r = await jsonp({ action: 'day_occupancy', date: date, ts: Date.now() });
         if (seq !== occupancySeq) return;
         if (!r || r.ok === false) return;
-        currentDayOccupancy = r;
-        dayOccupancyCache[key] = { ts: Date.now(), data: r };
+        const occ = (r.data && r.data.date) ? r.data : r;
+        if (!occ || !occ.date) return;
+        currentDayOccupancy = occ;
+        dayOccupancyCache[key] = { ts: Date.now(), data: occ };
         refreshAllowedTimeOptions();
       } catch (e) {
         console.warn('day occupancy failed', e);

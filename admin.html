@@ -266,6 +266,13 @@
     const API_URL = 'https://script.google.com/macros/s/AKfycbxEph50mLaejdFporC7_XOpShtk2ibvO758lA8_-TWGY8Jv9sJilfRTdXCmJ0ZLRK-4jg/exec';
     const $ = id => document.getElementById(id);
 
+    function apiErrorMessage(r, fallback = '載入失敗') {
+      return (r && r.error && r.error.message)
+        || (r && r.data && r.data.error && r.data.error.message)
+        || (r && r.message)
+        || fallback;
+    }
+
     let adminKey = sessionStorage.getItem('choco_admin_key');
     let filter = 'pending';
     let adminLoadSeq = 0;
@@ -349,7 +356,7 @@
 
       try {
         const r = await jsonp({ action: 'admin_list', adminKey: adminKey, filter: 'pending' });
-        if (!r.ok) throw new Error(r.data && r.data.error ? r.data.error.message : r.message);
+        if (!r.ok) throw new Error(apiErrorMessage(r));
         const items = r.data && r.data.items;
         sessionStorage.setItem('choco_admin_key', adminKey);
         adminLocalCacheSet('pending', items);
@@ -403,8 +410,7 @@
         const r = await jsonp({ action: 'admin_list', adminKey: adminKey, filter: filter });
         if (seq !== adminLoadSeq) return;
         if (!r.ok) {
-          if (r.data && r.data.error) throw new Error(r.data.error.message);
-          throw new Error(r.message || '載入失敗');
+          throw new Error(apiErrorMessage(r));
         }
         const items = r.data && r.data.items;
         adminLocalCacheSet(filter, items);
@@ -492,7 +498,7 @@
       toast('處理中…');
       try {
         const r = await jsonp({ action: 'admin_action', adminKey: adminKey, bookingId: id, adminAction: action, ts: Date.now() });
-        if (!r.ok) throw new Error(r.data && r.data.error ? r.data.error.message : r.message);
+        if (!r.ok) throw new Error(apiErrorMessage(r));
         const msg = [r.data && r.data.message, r.data && r.data.lineNotice].filter(Boolean).join('\n');
         toast(msg || '操作成功');
         await load();
@@ -632,7 +638,7 @@
       try {
         const r = await jsonp({ action: 'admin_vacation_snapshot', adminKey: adminKey, month: month, ts: Date.now() });
         if (seq !== vacationLoadSeq || month !== monthKey()) return;
-        if (!r.ok) throw new Error(r.data && r.data.error ? r.data.error.message : r.message);
+        if (!r.ok) throw new Error(apiErrorMessage(r));
 
         const closed = (r.data && r.data.closedDays || []).map(x => typeof x === 'string' ? x : x.date).filter(Boolean);
         const blocks = r.data && r.data.timeBlocks || [];
@@ -752,8 +758,8 @@
       }
 
       try {
-        const r = await jsonp({ action: 'admin_service_settings', adminKey: adminKey, retries: 1, timeoutMs: 7000 });
-        if (!r.ok) throw new Error(r.data && r.data.error ? r.data.error.message : r.message);
+        const r = await jsonp({ action: 'admin_service_settings', adminKey: adminKey });
+        if (!r.ok) throw new Error(apiErrorMessage(r));
         const items = r.data && r.data.items;
         if (!items || !items.length) throw new Error('未取得服務設定');
         renderServiceSettingsAdmin(items);
