@@ -245,7 +245,7 @@
                 <option value="">分</option>
               </select>
             </div>
-            <div class="fieldHint">平日 10:10–13:55 暫不開放，14:00 後重新開放；假日全時段開放。</div>
+            <div class="fieldHint">平日 10:00後至14:00前暫不開放預約，14:00 後重新開放；假日全時段開放。</div>
           </div>
 
           <div id="peopleFields" class="field">
@@ -425,7 +425,7 @@
       </div>
       <div class="calendarWeek"><span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span></div>
       <div id="bookingCalendarDays" class="calendarDays"></div>
-      <div class="calendarHint">灰色日期目前無法預約；休假日與不符合服務規則的日期會自動停用。</div>
+      <div class="calendarHint">灰色日期目前無法預約；休假日、已無可用時段或不符合服務規則的日期會自動停用。</div>
       <button type="button" class="calendarClose" onclick="closeBookingCalendar()">取消</button>
     </div>
   </div>
@@ -582,6 +582,11 @@
         if (!validateBookingDateFromUser()) return;
         if ($('dateDisplay')) $('dateDisplay').textContent = $('date').value.replace(/-/g, '/');
         currentDayOccupancy = null;
+        if (serviceId !== 'lesson') {
+          $('hour').value = '';
+          $('minute').value = '';
+        }
+        notice('', '');
         updateTimeOptions();
         loadDayOccupancy(true);
         refreshAllowedTimeOptions();
@@ -608,34 +613,85 @@
 
 
     let bookingCalendarCursor = new Date();
-    let publicClosedDaysCache = {};
+    let publicMonthOccupancyCache = {};
 
     function monthKeyFromDate(d) {
       return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
     }
 
-    async function getPublicClosedDays(month) {
-      if (publicClosedDaysCache[month]) return publicClosedDaysCache[month];
-      try {
-        const r = await jsonp({ action: 'public_closed_days', month: month, ts: Date.now() }, 9000, 2);
-        const dates = r && r.data && Array.isArray(r.data.dates) ? r.data.dates : [];
-        publicClosedDaysCache[month] = new Set(dates);
-        return publicClosedDaysCache[month];
-      } catch (e) {
-        console.warn('closed days load failed', e);
-        publicClosedDaysCache[month] = new Set();
-        return publicClosedDaysCache[month];
+    async function getPublicMonthOccupancy(month, force = false) {
+      if (!force && publicMonthOccupancyCache[month]) {
+        return publicMonthOccupancyCache[month];
       }
+
+      try {
+        const r = await jsonp(
+          { action: 'public_month_occupancy', month: month, ts: Date.now() },
+          10000,
+          2
+        );
+
+        const data = r && r.data ? r.data : null;
+        if (!data) throw new Error('empty month occupancy');
+
+        const result = {
+          closedDates: new Set(data.closedDates || []),
+          intervalsByDate: data.intervalsByDate || {},
+          version: data.version || 0
+        };
+
+        publicMonthOccupancyCache[month] = result;
+        return result;
+      } catch (e) {
+        console.warn('month occupancy load failed', e);
+        return {
+          closedDates: new Set(),
+          intervalsByDate: {},
+          version: 0
+        };
+      }
+    }
+
+    function intervalsOverlap(start, end, intervals) {
+      return (intervals || []).some(x => start < Number(x.end) && end > Number(x.start));
+    }
+
+    function dateHasAnyBookableTime(dateKey, intervals) {
+      const d = new Date(dateKey + 'T12:00:00');
+      const weekday = d.getDay();
+
+      if (serviceId === 'lesson') {
+        if (weekday !== 0 && weekday !== 6) return false;
+        // 11:00–15:00 + 30 分鐘 buffer
+        return !intervalsOverlap(660, 930, intervals);
+      }
+
+      const duration = estimateServiceMinutesLocal();
+      if (!duration) return false;
+      const lockDuration = duration + 30;
+
+      for (let mins = 0; mins < 1440; mins += 5) {
+        const h = String(Math.floor(mins / 60)).padStart(2, '0');
+        const m = String(mins % 60).padStart(2, '0');
+        const time = h + ':' + m;
+
+        if (!isAllowedStartTime(time, dateKey)) continue;
+        if (mins + lockDuration > 1440) continue;
+        if (!intervalsOverlap(mins, mins + lockDuration, intervals)) return true;
+      }
+
+      return false;
     }
 
     async function openBookingCalendar() {
       const base = $('date').value
         ? new Date($('date').value + 'T12:00:00')
         : new Date();
+
       bookingCalendarCursor = new Date(base.getFullYear(), base.getMonth(), 1);
       $('bookingCalendar').classList.add('show');
       document.body.classList.add('modalOpen');
-      await renderBookingCalendar();
+      await renderBookingCalendar(true);
     }
 
     function closeBookingCalendar() {
@@ -649,14 +705,14 @@
         bookingCalendarCursor.getMonth() + delta,
         1
       );
-      await renderBookingCalendar();
+      await renderBookingCalendar(false);
     }
 
-    async function renderBookingCalendar() {
+    async function renderBookingCalendar(force = false) {
       const y = bookingCalendarCursor.getFullYear();
       const m = bookingCalendarCursor.getMonth();
       const month = y + '-' + String(m + 1).padStart(2, '0');
-      const closed = await getPublicClosedDays(month);
+      const monthOcc = await getPublicMonthOccupancy(month, force);
 
       $('bookingCalendarTitle').textContent = y + ' 年 ' + (m + 1) + ' 月';
       const box = $('bookingCalendarDays');
@@ -681,11 +737,14 @@
       for (let day = 1; day <= daysInMonth; day++) {
         const d = new Date(y, m, day);
         const dateKey = localDateString(d);
-        const weekday = d.getDay();
         const beforeTomorrow = d.getTime() < tomorrow.getTime();
-        const serviceRuleDisabled = serviceId === 'lesson' && weekday !== 0 && weekday !== 6;
-        const isClosed = closed.has(dateKey);
-        const disabled = beforeTomorrow || serviceRuleDisabled || isClosed;
+        const isClosed = monthOcc.closedDates.has(dateKey);
+        const intervals = monthOcc.intervalsByDate[dateKey] || [];
+        const noAvailability = !beforeTomorrow && !isClosed
+          ? !dateHasAnyBookableTime(dateKey, intervals)
+          : false;
+
+        const disabled = beforeTomorrow || isClosed || noAvailability;
 
         const btn = document.createElement('button');
         btn.type = 'button';
@@ -700,6 +759,8 @@
           btn.onclick = () => selectBookingDate(dateKey);
         } else if (isClosed) {
           btn.title = '休假日';
+        } else if (noAvailability) {
+          btn.title = '當日已無可預約時段';
         }
 
         box.appendChild(btn);
@@ -709,9 +770,13 @@
     function selectBookingDate(dateKey) {
       $('date').value = dateKey;
       $('dateDisplay').textContent = dateKey.replace(/-/g, '/');
+      currentDayOccupancy = null;
+      $('hour').value = '';
+      $('minute').value = '';
       $('date').dispatchEvent(new Event('change'));
       closeBookingCalendar();
     }
+
 
     function validateBookingDateFromUser() {
       const el = $('date');
@@ -979,7 +1044,7 @@
         $('minute').value = '00';
       } else {
         $('hour').value = '';
-        $('minute').value = '00';
+        $('minute').value = '';
       }
 
       toggleArea();
@@ -1067,7 +1132,7 @@
       const [h, m] = time.split(':').map(Number);
       const mins = h * 60 + m;
       // 平日 10:10–13:55 不開放；10:00、10:05 與 14:00 後可選。
-      return mins <= 605 || mins >= 840;
+      return mins <= 600 || mins >= 840;
     }
 
     let dayOccupancyCache = {};
@@ -1100,6 +1165,11 @@
         currentDayOccupancy = occ;
         dayOccupancyCache[key] = { ts: Date.now(), data: occ };
         refreshAllowedTimeOptions();
+
+        // Occupancy 是非同步取得；回來後再次同步畫面，避免「看起來可選，
+        // 實際上已被占用」的落差。
+        if (selectedTime()) scheduleCheck();
+        if (serviceId === 'lesson') scheduleCheck();
       } catch (e) {
         console.warn('day occupancy failed', e);
       }
@@ -1142,12 +1212,14 @@
 
       if (hourEl.selectedOptions[0] && hourEl.selectedOptions[0].disabled) {
         hourEl.value = '';
-        minuteEl.value = '00';
+        minuteEl.value = '';
+        notice('', '');
         return;
       }
 
-      if (!minuteEl.value || (minuteEl.selectedOptions[0] && minuteEl.selectedOptions[0].disabled)) {
-        minuteEl.value = '00';
+      if (minuteEl.value && minuteEl.selectedOptions[0] && minuteEl.selectedOptions[0].disabled) {
+        minuteEl.value = '';
+        notice('', '');
       }
     }
 
@@ -1260,9 +1332,21 @@
 
       if (serviceId === 'lesson') {
         if (!validateLessonDate()) {
-          notice('ok', '1 對 1 美妝教學目前僅開放週六、週日預約 ♡\n11:00–15:00，一次 4 小時（不接受加時）');
+          notice('', '');
           return;
         }
+
+        if (!currentDayOccupancy || currentDayOccupancy.date !== p.date) {
+          await loadDayOccupancy(true);
+        }
+
+        if (currentDayOccupancy && currentDayOccupancy.date === p.date) {
+          if (currentDayOccupancy.closedDay || overlapsOccupied('11:00')) {
+            notice('bad', '這一天的美妝教學時段已無法預約，請換其他日期看看 ♡');
+            return;
+          }
+        }
+
         notice('ok', '1 對 1 美妝教學固定於 11:00 開始，15:00 結束 ♡');
         return;
       }
@@ -1378,6 +1462,10 @@
           successToast.classList.remove('show');
         }, 4200);
       }
+
+      publicMonthOccupancyCache = {};
+      dayOccupancyCache = {};
+      currentDayOccupancy = null;
 
       $('formPage').style.display = 'none';
       $('result').innerHTML = `
