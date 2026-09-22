@@ -585,45 +585,44 @@
 
     function initForm() {
       const hour = $('hour');
-      hour.innerHTML = '<option value="">時</option>';
-      for (let i = 0; i < 24; i++) {
-        const v = String(i).padStart(2, '0');
-        hour.innerHTML += '<option value="' + v + '">' + v + '</option>';
-      }
       const minute = $('minute');
-      minute.innerHTML = '<option value="">分</option>';
-      for (let i = 0; i < 60; i += 5) {
-        const v = String(i).padStart(2, '0');
-        minute.innerHTML += '<option value="' + v + '">' + v + '</option>';
-      }
-      minute.value = '00';
 
-      const now = new Date();
-      const localToday = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
-      const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-      const localTomorrow = tomorrow.getFullYear() + '-' + String(tomorrow.getMonth() + 1).padStart(2, '0') + '-' + String(tomorrow.getDate()).padStart(2, '0');
+      hour.innerHTML = '<option value="">時</option>';
+      minute.innerHTML = '<option value="">分</option>';
+      hour.disabled = true;
+      minute.disabled = true;
 
       $('date').value = '';
       if ($('dateDisplay')) $('dateDisplay').textContent = '請選擇日期';
 
-      $('date').addEventListener('change', () => {
+      $('date').addEventListener('change', async () => {
         if (!validateLessonDate()) return;
         if (!validateBookingDateFromUser()) return;
         if ($('dateDisplay')) $('dateDisplay').textContent = $('date').value.replace(/-/g, '/');
-        currentDayOccupancy = null;
+
         if (serviceId !== 'lesson') {
           $('hour').value = '';
           $('minute').value = '';
         }
+
         notice('', '');
         updateTimeOptions();
-        loadDayOccupancy(true);
+
+        if (!currentDayOccupancy || currentDayOccupancy.date !== $('date').value) {
+          const hydrated = hydrateDayOccupancyFromMonthCache($('date').value);
+          if (!hydrated) {
+            setTimeControlsLoading(true);
+            notice('', '正在讀取這天可預約的時間…');
+            await loadDayOccupancy(true);
+          }
+        }
+
         refreshAllowedTimeOptions();
         scheduleCheck();
       });
 
       $('hour').addEventListener('change', () => {
-        updateMinuteOptionsForToday();
+        $('minute').value = '';
         refreshAllowedTimeOptions();
         scheduleCheck();
       });
@@ -631,9 +630,6 @@
       $('minute').addEventListener('change', () => {
         scheduleCheck();
       });
-
-      updateTimeOptions();
-      refreshAllowedTimeOptions();
     }
 
     function localDateString(d) {
@@ -644,14 +640,52 @@
     let bookingCalendarCursor = new Date();
     let publicMonthOccupancyCache = {};
     let bookingCalendarRenderSeq = 0;
-    const MONTH_OCCUPANCY_TTL = 30000;
+    const MONTH_OCCUPANCY_TTL = 60000;
+    const MONTH_LOCAL_CACHE_TTL = 5 * 60 * 1000;
 
     function monthKeyFromDate(d) {
       return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
     }
 
+    function monthCacheStorageKey(month) {
+      return 'choco_month_occ_' + month;
+    }
+
+    function restoreMonthCache(month) {
+      try {
+        const raw = JSON.parse(localStorage.getItem(monthCacheStorageKey(month)) || 'null');
+        if (!raw || !raw.ts || Date.now() - raw.ts > MONTH_LOCAL_CACHE_TTL) return null;
+        const data = {
+          closedDates: new Set(raw.closedDates || []),
+          intervalsByDate: raw.intervalsByDate || {},
+          version: raw.version || 0,
+          partial: false
+        };
+        publicMonthOccupancyCache[month] = { ts: raw.ts, data };
+        return data;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    function saveMonthCache(month, data) {
+      try {
+        localStorage.setItem(monthCacheStorageKey(month), JSON.stringify({
+          ts: Date.now(),
+          closedDates: Array.from(data.closedDates || []),
+          intervalsByDate: data.intervalsByDate || {},
+          version: data.version || 0
+        }));
+      } catch (_) {}
+    }
+
     async function getPublicMonthOccupancy(month, force = false) {
-      const cached = publicMonthOccupancyCache[month];
+      let cached = publicMonthOccupancyCache[month];
+      if (!cached) {
+        const restored = restoreMonthCache(month);
+        if (restored) cached = publicMonthOccupancyCache[month];
+      }
+
       if (!force && cached && Date.now() - cached.ts < MONTH_OCCUPANCY_TTL) {
         return cached.data;
       }
@@ -673,12 +707,17 @@
           partial: false
         };
 
-        publicMonthOccupancyCache[month] = { ts: Date.now(), data: data };
+        publicMonthOccupancyCache[month] = { ts: Date.now(), data };
+        saveMonthCache(month, data);
         return data;
       } catch (e) {
         console.warn('month occupancy load failed', e);
 
-        // 若整月占用資訊暫時讀取失敗，至少抓休假日，避免整個月曆空白。
+        // 有舊快取就先繼續用，避免整個月曆卡住。
+        if (cached && cached.data) {
+          return cached.data;
+        }
+
         try {
           const fallback = await jsonp(
             { action: 'public_closed_days', month: month, ts: Date.now() },
@@ -689,16 +728,13 @@
             ? fallback.data.dates
             : [];
 
-          const data = {
+          return {
             closedDates: new Set(dates),
             intervalsByDate: {},
             version: 0,
             partial: true
           };
-          publicMonthOccupancyCache[month] = { ts: Date.now(), data: data };
-          return data;
-        } catch (fallbackErr) {
-          console.warn('closed days fallback failed', fallbackErr);
+        } catch (_) {
           return {
             closedDates: new Set(),
             intervalsByDate: {},
@@ -719,7 +755,7 @@
 
       if (serviceId === 'lesson') {
         if (weekday !== 0 && weekday !== 6) return false;
-        return !intervalsOverlap(660, 930, intervals); // 11:00–15:00 + 30 分 buffer
+        return !intervalsOverlap(660, 930, intervals);
       }
 
       const duration = estimateServiceMinutesLocal();
@@ -730,21 +766,64 @@
         const h = String(Math.floor(mins / 60)).padStart(2, '0');
         const m = String(mins % 60).padStart(2, '0');
         const time = h + ':' + m;
-
         if (!isAllowedStartTime(time, dateKey)) continue;
         if (mins + lockDuration > 1440) continue;
         if (!intervalsOverlap(mins, mins + lockDuration, intervals)) return true;
       }
-
       return false;
     }
 
-    function renderBookingCalendarLoading() {
+    function renderCalendarShell(monthOcc = null) {
       const y = bookingCalendarCursor.getFullYear();
       const m = bookingCalendarCursor.getMonth();
+      const box = $('bookingCalendarDays');
       $('bookingCalendarTitle').textContent = y + ' 年 ' + (m + 1) + ' 月';
-      $('bookingCalendarDays').innerHTML =
-        '<div class="calendarLoading">正在讀取可預約日期…</div>';
+      box.innerHTML = '';
+
+      const firstDay = new Date(y, m, 1).getDay();
+      const daysInMonth = new Date(y, m + 1, 0).getDate();
+      for (let i = 0; i < firstDay; i++) {
+        const blank = document.createElement('button');
+        blank.type = 'button';
+        blank.className = 'calendarDay blank';
+        blank.tabIndex = -1;
+        box.appendChild(blank);
+      }
+
+      const now = new Date();
+      const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+      tomorrow.setHours(0, 0, 0, 0);
+      const todayKey = localDateString(now);
+
+      for (let day = 1; day <= daysInMonth; day++) {
+        const d = new Date(y, m, day);
+        const dateKey = localDateString(d);
+        const weekday = d.getDay();
+        const beforeTomorrow = d.getTime() < tomorrow.getTime();
+
+        let disabled = beforeTomorrow;
+        if (serviceId === 'lesson' && weekday !== 0 && weekday !== 6) disabled = true;
+
+        if (monthOcc) {
+          const isClosed = monthOcc.closedDates.has(dateKey);
+          const intervals = monthOcc.intervalsByDate[dateKey] || [];
+          const noAvailability = !monthOcc.partial && !beforeTomorrow && !isClosed
+            ? !dateHasAnyBookableTime(dateKey, intervals)
+            : false;
+          disabled = disabled || isClosed || noAvailability;
+        }
+
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'calendarDay'
+          + (disabled ? ' disabled' : '')
+          + (dateKey === todayKey ? ' today' : '')
+          + ($('date').value === dateKey ? ' selected' : '');
+        btn.textContent = String(day);
+        btn.disabled = disabled;
+        if (!disabled) btn.onclick = () => selectBookingDate(dateKey);
+        box.appendChild(btn);
+      }
     }
 
     function preloadBookingCalendarData() {
@@ -764,9 +843,18 @@
       $('bookingCalendar').classList.add('show');
       document.body.classList.add('modalOpen');
 
-      // 先立即畫出月份與載入狀態，不讓使用者看到「空白月曆」。
-      renderBookingCalendarLoading();
-      await renderBookingCalendar(false);
+      const month = monthKeyFromDate(bookingCalendarCursor);
+      const cached = publicMonthOccupancyCache[month]?.data || restoreMonthCache(month);
+
+      // 先立即畫出日曆，不等 API。
+      renderCalendarShell(cached || null);
+
+      // 背景刷新最新狀態，完成後無縫更新。
+      const seq = ++bookingCalendarRenderSeq;
+      const fresh = await getPublicMonthOccupancy(month, false);
+      if (seq !== bookingCalendarRenderSeq) return;
+      if (month !== monthKeyFromDate(bookingCalendarCursor)) return;
+      renderCalendarShell(fresh);
     }
 
     function closeBookingCalendar() {
@@ -780,76 +868,34 @@
         bookingCalendarCursor.getMonth() + delta,
         1
       );
-      renderBookingCalendarLoading();
-      await renderBookingCalendar(false);
-    }
 
-    async function renderBookingCalendar(force = false) {
+      const month = monthKeyFromDate(bookingCalendarCursor);
+      const cached = publicMonthOccupancyCache[month]?.data || restoreMonthCache(month);
+      renderCalendarShell(cached || null);
+
       const seq = ++bookingCalendarRenderSeq;
-      const y = bookingCalendarCursor.getFullYear();
-      const m = bookingCalendarCursor.getMonth();
-      const month = y + '-' + String(m + 1).padStart(2, '0');
-
-      $('bookingCalendarTitle').textContent = y + ' 年 ' + (m + 1) + ' 月';
-
-      const cached = publicMonthOccupancyCache[month];
-      if (!cached || force || Date.now() - cached.ts >= MONTH_OCCUPANCY_TTL) {
-        $('bookingCalendarDays').innerHTML =
-          '<div class="calendarLoading">正在讀取可預約日期…</div>';
-      }
-
-      const monthOcc = await getPublicMonthOccupancy(month, force);
+      const fresh = await getPublicMonthOccupancy(month, false);
       if (seq !== bookingCalendarRenderSeq) return;
       if (month !== monthKeyFromDate(bookingCalendarCursor)) return;
+      renderCalendarShell(fresh);
+    }
 
-      const box = $('bookingCalendarDays');
-      box.innerHTML = '';
+    function hydrateDayOccupancyFromMonthCache(dateKey) {
+      const month = dateKey.slice(0, 7);
+      const cached = publicMonthOccupancyCache[month]?.data || restoreMonthCache(month);
+      if (!cached || cached.partial) return false;
 
-      const firstDay = new Date(y, m, 1).getDay();
-      const daysInMonth = new Date(y, m + 1, 0).getDate();
-
-      for (let i = 0; i < firstDay; i++) {
-        const blank = document.createElement('button');
-        blank.type = 'button';
-        blank.className = 'calendarDay blank';
-        blank.tabIndex = -1;
-        box.appendChild(blank);
-      }
-
-      const now = new Date();
-      const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-      tomorrow.setHours(0, 0, 0, 0);
-      const todayKey = localDateString(now);
-
-      for (let day = 1; day <= daysInMonth; day++) {
-        const d = new Date(y, m, day);
-        const dateKey = localDateString(d);
-        const beforeTomorrow = d.getTime() < tomorrow.getTime();
-        const isClosed = monthOcc.closedDates.has(dateKey);
-        const intervals = monthOcc.intervalsByDate[dateKey] || [];
-
-        // fallback 模式只掌握休假日，不能武斷把其他日期判定為滿檔。
-        const noAvailability = !monthOcc.partial && !beforeTomorrow && !isClosed
-          ? !dateHasAnyBookableTime(dateKey, intervals)
-          : false;
-
-        const disabled = beforeTomorrow || isClosed || noAvailability;
-
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'calendarDay'
-          + (disabled ? ' disabled' : '')
-          + (dateKey === todayKey ? ' today' : '')
-          + ($('date').value === dateKey ? ' selected' : '');
-        btn.textContent = String(day);
-        btn.disabled = disabled;
-
-        if (!disabled) {
-          btn.onclick = () => selectBookingDate(dateKey);
-        }
-
-        box.appendChild(btn);
-      }
+      currentDayOccupancy = {
+        ok: true,
+        date: dateKey,
+        closedDay: cached.closedDates.has(dateKey),
+        intervals: cached.intervalsByDate[dateKey] || []
+      };
+      dayOccupancyCache[serviceId + '_' + dateKey] = {
+        ts: Date.now(),
+        data: currentDayOccupancy
+      };
+      return true;
     }
 
     function selectBookingDate(dateKey) {
@@ -858,6 +904,10 @@
       currentDayOccupancy = null;
       $('hour').value = '';
       $('minute').value = '';
+
+      // 月曆資料若已經完整，就直接拿來產生時間，不再多打一支 API。
+      hydrateDayOccupancyFromMonthCache(dateKey);
+
       $('date').dispatchEvent(new Event('change'));
       closeBookingCalendar();
     }
@@ -906,37 +956,11 @@
     }
 
     function updateTimeOptions() {
-      const now = new Date();
-      const today = isTodaySelected();
-      Array.from($('hour').options).forEach(opt => {
-        if (!opt.value) return;
-        const hour = parseInt(opt.value, 10);
-        opt.disabled = today && hour <= now.getHours();
-      });
-      if ($('hour').value && $('hour').selectedOptions[0] && $('hour').selectedOptions[0].disabled) {
-        $('hour').value = '';
-        $('minute').value = '';
-      }
-      updateMinuteOptionsForToday();
+      // 可預約時間由 refreshAllowedTimeOptions() 統一依日期、服務規則與占用狀態產生。
     }
 
     function updateMinuteOptionsForToday() {
-      const now = new Date();
-      const today = isTodaySelected();
-      const selectedHour = parseInt($('hour').value, 10);
-      Array.from($('minute').options).forEach(opt => {
-        if (!opt.value) return;
-        if (today && Number.isFinite(selectedHour) && selectedHour === now.getHours()) {
-          const minute = parseInt(opt.value, 10);
-          const minAllowed = Math.ceil((now.getMinutes() + 1) / 5) * 5;
-          opt.disabled = minute < minAllowed;
-        } else {
-          opt.disabled = false;
-        }
-      });
-      if ($('minute').value && $('minute').selectedOptions[0] && $('minute').selectedOptions[0].disabled) {
-        $('minute').value = '00';
-      }
+      // 保留函式名稱供舊事件相容；實際選項由 refreshAllowedTimeOptions() 管理。
     }
 
     function validateNotPast() {
@@ -1135,9 +1159,9 @@
       toggleArea();
       syncConditionalRequired();
       preloadBookingCalendarData();
-      loadDayOccupancy(true);
+      currentDayOccupancy = null;
       refreshAllowedTimeOptions();
-      scheduleCheck();
+      notice('', '請先選擇日期，再選擇可預約時間。');
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
@@ -1231,33 +1255,41 @@
 
     async function loadDayOccupancy(force = false) {
       const date = $('date').value;
-      if (!date) return;
+      if (!date) return null;
 
       const key = dayOccupancyKey();
       const cached = dayOccupancyCache[key];
-      if (cached && !force && Date.now() - cached.ts < 15000) {
+      if (cached && !force && Date.now() - cached.ts < 60000) {
         currentDayOccupancy = cached.data;
         refreshAllowedTimeOptions();
-        return;
+        return currentDayOccupancy;
       }
 
       const seq = ++occupancySeq;
       try {
-        const r = await jsonp({ action: 'day_occupancy', date: date, ts: Date.now() });
-        if (seq !== occupancySeq) return;
-        if (!r || r.ok === false) return;
+        const r = await jsonp({ action: 'day_occupancy', date: date, ts: Date.now() }, 9000, 2);
+        if (seq !== occupancySeq) return null;
+        if (!r || r.ok === false) throw new Error('invalid occupancy');
+
         const occ = (r.data && r.data.date) ? r.data : r;
-        if (!occ || !occ.date) return;
+        if (!occ || !occ.date) throw new Error('missing occupancy');
+
         currentDayOccupancy = occ;
         dayOccupancyCache[key] = { ts: Date.now(), data: occ };
         refreshAllowedTimeOptions();
 
-        // Occupancy 是非同步取得；回來後再次同步畫面，避免「看起來可選，
-        // 實際上已被占用」的落差。
         if (selectedTime()) scheduleCheck();
         if (serviceId === 'lesson') scheduleCheck();
+        return occ;
       } catch (e) {
         console.warn('day occupancy failed', e);
+        setTimeControlsLoading(false);
+        $('hour').innerHTML = '<option value="">時</option>';
+        $('minute').innerHTML = '<option value="">分</option>';
+        $('hour').disabled = false;
+        $('minute').disabled = true;
+        notice('', '可預約時間讀取較慢，請重新選擇日期再試一次。');
+        return null;
       }
     }
 
@@ -1276,37 +1308,116 @@
       return isAllowedStartTime(time, dateValue) && !overlapsOccupied(time);
     }
 
+    function setTimeControlsLoading(loading) {
+      const hourEl = $('hour');
+      const minuteEl = $('minute');
+      if (!hourEl || !minuteEl) return;
+      hourEl.disabled = !!loading;
+      minuteEl.disabled = !!loading;
+
+      if (loading) {
+        hourEl.innerHTML = '<option value="">讀取中…</option>';
+        minuteEl.innerHTML = '<option value="">分</option>';
+      }
+    }
+
+    function availableMinutesForHour(hour) {
+      const result = [];
+      if (!$('date').value || !currentDayOccupancy || currentDayOccupancy.date !== $('date').value) return result;
+
+      for (let m = 0; m < 60; m += 5) {
+        const time = String(hour).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+        if (isSelectableStartTime(time, $('date').value)) result.push(m);
+      }
+      return result;
+    }
+
     function refreshAllowedTimeOptions() {
       const hourEl = $('hour');
       const minuteEl = $('minute');
       if (!hourEl || !minuteEl) return;
 
-      Array.from(hourEl.options).forEach(opt => {
-        if (!opt.value) return;
-        const h = Number(opt.value);
-        const hasAllowed = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55].some(m =>
-          isSelectableStartTime(String(h).padStart(2, '0') + String(m).padStart(2, '0'), $('date').value)
-        );
-        opt.disabled = !hasAllowed;
-      });
+      if (serviceId === 'lesson') {
+        hourEl.innerHTML = '<option value="11">11</option>';
+        minuteEl.innerHTML = '<option value="00">00</option>';
+        hourEl.value = '11';
+        minuteEl.value = '00';
+        hourEl.disabled = true;
+        minuteEl.disabled = true;
+        return;
+      }
 
-      const h = hourEl.value || '00';
-      Array.from(minuteEl.options).forEach(opt => {
-        if (!opt.value) return;
-        opt.disabled = !isSelectableStartTime(h + opt.value, $('date').value);
-      });
+      const date = $('date').value;
+      if (!date) {
+        hourEl.innerHTML = '<option value="">時</option>';
+        minuteEl.innerHTML = '<option value="">分</option>';
+        hourEl.disabled = true;
+        minuteEl.disabled = true;
+        return;
+      }
 
-      if (hourEl.selectedOptions[0] && hourEl.selectedOptions[0].disabled) {
-        hourEl.value = '';
-        minuteEl.value = '';
+      if (!currentDayOccupancy || currentDayOccupancy.date !== date) {
+        setTimeControlsLoading(true);
+        return;
+      }
+
+      if (currentDayOccupancy.closedDay) {
+        hourEl.innerHTML = '<option value="">無可預約時間</option>';
+        minuteEl.innerHTML = '<option value="">分</option>';
+        hourEl.disabled = true;
+        minuteEl.disabled = true;
+        notice('bad', '這天目前不開放預約，請換其他日期看看 ♡');
+        return;
+      }
+
+      const previousHour = hourEl.value;
+      const previousMinute = minuteEl.value;
+      const availableHours = [];
+
+      for (let h = 0; h < 24; h++) {
+        if (availableMinutesForHour(h).length) availableHours.push(h);
+      }
+
+      if (!availableHours.length) {
+        hourEl.innerHTML = '<option value="">已無可預約時間</option>';
+        minuteEl.innerHTML = '<option value="">分</option>';
+        hourEl.disabled = true;
+        minuteEl.disabled = true;
+        notice('bad', '這天目前已無可預約時段，請換其他日期看看 ♡');
+        return;
+      }
+
+      hourEl.disabled = false;
+      hourEl.innerHTML = '<option value="">時</option>' + availableHours.map(h => {
+        const v = String(h).padStart(2, '0');
+        return '<option value="' + v + '">' + v + '</option>';
+      }).join('');
+
+      if (previousHour && availableHours.includes(Number(previousHour))) {
+        hourEl.value = previousHour;
+      }
+
+      const selectedHour = hourEl.value;
+      minuteEl.innerHTML = '<option value="">分</option>';
+
+      if (!selectedHour) {
+        minuteEl.disabled = true;
         notice('', '');
         return;
       }
 
-      if (minuteEl.value && minuteEl.selectedOptions[0] && minuteEl.selectedOptions[0].disabled) {
-        minuteEl.value = '';
-        notice('', '');
+      const mins = availableMinutesForHour(Number(selectedHour));
+      minuteEl.disabled = false;
+      minuteEl.innerHTML = '<option value="">分</option>' + mins.map(m => {
+        const v = String(m).padStart(2, '0');
+        return '<option value="' + v + '">' + v + '</option>';
+      }).join('');
+
+      if (previousMinute && mins.includes(Number(previousMinute))) {
+        minuteEl.value = previousMinute;
       }
+
+      notice('', '');
     }
 
     function estimateServiceMinutesLocal() {
