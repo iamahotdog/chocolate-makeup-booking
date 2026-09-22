@@ -4,6 +4,11 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Chocolate Makeup Studio</title>
+  <link rel="preconnect" href="https://script.google.com" crossorigin>
+  <link rel="preconnect" href="https://script.googleusercontent.com" crossorigin>
+  <link rel="dns-prefetch" href="https://script.google.com">
+  <link rel="dns-prefetch" href="https://script.googleusercontent.com">
+  <link rel="preconnect" href="https://static.line-scdn.net" crossorigin>
   <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <style>
     :root {
@@ -45,6 +50,16 @@
     .bookBtn { flex: 0 0 auto; border: 0; border-radius: 999px; padding: 9px 13px; background: linear-gradient(#7b5039, #613928); color: #fff; font-size: 11px; font-weight: 800; box-shadow: 0 3px 0 #46291e; transition: .08s; }
     .bookBtn:active { transform: translateY(3px); box-shadow: 0 0 0 #46291e; }
     .formPage { display: none; padding: 0 14px; }
+    /* 頁面切換動畫：離開的畫面先淡出/微移，接著新畫面淡入/微移進來，
+       取代原本 display:none <-> display:block 的瞬間切換。 */
+    .viewFade { transition: opacity .2s cubic-bezier(.4,0,.2,1), transform .2s cubic-bezier(.4,0,.2,1); }
+    .viewFade.fwd-leave { opacity: 0; transform: translateY(-10px) scale(.98); }
+    .viewFade.fwd-enter-from { opacity: 0; transform: translateY(16px) scale(.98); }
+    .viewFade.back-leave { opacity: 0; transform: translateY(10px) scale(.98); }
+    .viewFade.back-enter-from { opacity: 0; transform: translateY(-16px) scale(.98); }
+    @media (prefers-reduced-motion: reduce) {
+      .viewFade { transition: none !important; }
+    }
     .formCard { overflow: hidden; border: 1px solid var(--line); border-radius: 23px; background: var(--paper); box-shadow: var(--shadow); }
     .formHead { padding: 17px 17px 14px; border-bottom: 1px solid #efe2da; background: linear-gradient(#fffdfb, #fff9f5); }
     .back { border: 0; background: none; padding: 3px 0; color: var(--brown); font-size: 13px; font-weight: 800; }
@@ -735,6 +750,34 @@
       }
     }
 
+    // 柔和切換兩個畫面：先讓 hideId 淡出＋微移，結束後才切換 display，
+    // 同時讓 showId 從一個輕微位移的透明狀態淡入到定位。
+    // dir: 'fwd'（前往下一頁，由下往上進場）或 'back'（返回上一頁，由上往下進場）。
+    function switchView(hideId, showId, dir = 'fwd') {
+      const hide = $(hideId);
+      const show = $(showId);
+      if (!hide || !show) return;
+
+      const leaveClass = dir === 'fwd' ? 'fwd-leave' : 'back-leave';
+      const enterFromClass = dir === 'fwd' ? 'fwd-enter-from' : 'back-enter-from';
+
+      hide.classList.add('viewFade');
+      requestAnimationFrame(() => hide.classList.add(leaveClass));
+
+      setTimeout(() => {
+        hide.style.display = 'none';
+        hide.classList.remove('viewFade', leaveClass);
+
+        show.style.display = 'block';
+        show.classList.add('viewFade', enterFromClass);
+        void show.offsetHeight; // 強制 reflow，確保接下來的 class 移除會觸發轉場
+        requestAnimationFrame(() => {
+          show.classList.remove(enterFromClass);
+          setTimeout(() => show.classList.remove('viewFade'), 220);
+        });
+      }, 170);
+    }
+
     function openForm(id) {
       if (serviceSettings[id] === false) {
         showBrandModal('目前未開放', names[id] + ' 目前暫不開放預約，請選擇其他服務。', '🪄', '好的');
@@ -742,8 +785,7 @@
       }
       serviceId = id;
       setTimeout(syncConditionalRequired, 0);
-      $('services').style.display = 'none';
-      $('formPage').style.display = 'block';
+      switchView('services', 'formPage', 'fwd');
       $('result').innerHTML = '';
       $('formTitle').textContent = names[id];
       $('peopleFields').classList.toggle('hidden', id === 'lesson');
@@ -784,8 +826,7 @@
     }
 
     function backToServices() {
-      $('formPage').style.display = 'none';
-      $('services').style.display = 'block';
+      switchView('formPage', 'services', 'back');
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
@@ -987,7 +1028,7 @@
       timer = setTimeout(checkAvailability, 180);
     }
 
-    function jsonp(params, timeoutMs = 8500) {
+    function jsonpOnce(params, timeoutMs = 8500) {
       return new Promise((resolve, reject) => {
         const cb = 'cb' + Date.now() + Math.random().toString(36).slice(2);
         const script = document.createElement('script');
@@ -1016,6 +1057,23 @@
 
         timeoutId = setTimeout(() => finish(reject, new Error('timeout')), timeoutMs);
       });
+    }
+
+    // GAS Web App 偶爾會因為冷啟動或暫時性延遲而逾時，單次嘗試失敗就直接
+    // 顯示錯誤會讓使用者覺得「常常斷線」。這裡預設重試一次（共 2 次嘗試），
+    // 並在重試時拉長逾時時間，簽章維持 jsonp(params, timeoutMs) 不變，
+    // 所以原本呼叫的地方完全不用改。
+    async function jsonp(params, timeoutMs = 8500, retries = 2) {
+      let lastErr = null;
+      for (let i = 0; i < retries; i++) {
+        try {
+          return await jsonpOnce(params, i === 0 ? timeoutMs : Math.max(timeoutMs, 10000));
+        } catch (e) {
+          lastErr = e;
+          if (i < retries - 1) await new Promise(r => setTimeout(r, 350 + 250 * i));
+        }
+      }
+      throw lastErr || new Error('API request failed');
     }
 
     function checkAvailability() {

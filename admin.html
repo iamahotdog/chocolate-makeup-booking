@@ -4,6 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Chocolate 預約管理</title>
+  <link rel="preconnect" href="https://script.google.com" crossorigin>
+  <link rel="preconnect" href="https://script.googleusercontent.com" crossorigin>
+  <link rel="dns-prefetch" href="https://script.google.com">
+  <link rel="dns-prefetch" href="https://script.googleusercontent.com">
   <style>
     :root {
       --bg: #fff8f3;
@@ -317,7 +321,10 @@
       });
     }
 
-    async function jsonp(params, retries = 1, timeoutMs = 8000) {
+    async function jsonp(params, retries = 2, timeoutMs = 8000) {
+      // 注意：retries 預設原本是 1，等於下面的迴圈只會跑一次、完全沒有真的重試，
+      // 連線一有風吹草動（GAS 冷啟動、暫時性逾時）就直接失敗給使用者看。
+      // 改成預設 2 次，搭配下面的 backoff，才是真正會重試的行為。
       let lastErr = null;
       for (let i = 0; i < retries; i++) {
         try {
