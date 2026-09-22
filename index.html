@@ -154,7 +154,7 @@
         <div class="icon">🥨</div>
         <div class="serviceText">
           <h2>登記妝髮</h2>
-          <p>登記結婚妝髮。</p>
+          <p>登記結婚妝髮，暫不提供婚禮當日妝髮服務。</p>
           <span class="meta">女生約 3 小時／男生約 1 小時</span>
         </div>
         <button class="bookBtn" onclick="openForm('registration')">預約</button>
@@ -164,7 +164,7 @@
         <div class="icon">👰🏻‍♀️</div>
         <div class="serviceText">
           <h2>拍婚紗專區</h2>
-          <p>拍攝婚紗妝髮，暫不提供婚禮當日妝髮服務。</p>
+          <p>拍攝婚紗妝髮。</p>
           <span class="meta">女生約 3 小時／男生約 1 小時</span>
         </div>
         <button class="bookBtn" onclick="openForm('wedding')">預約</button>
@@ -225,8 +225,8 @@
             <div class="fieldHint">平日開妝時間可選至 10:00，14:00 後重新開放；假日全時段開放。</div>
           </div>
 
-          <div class="field">
-            <label class="requiredLabel">今天要變漂亮的人數</label>
+          <div id="peopleFields" class="field">
+            <label id="peopleLabel" class="requiredLabel">今天要變漂亮的人數</label>
             <div class="grid2">
               <div>
                 <div class="counterLabel">女生</div>
@@ -264,12 +264,6 @@
           </div>
 
           <div class="field">
-            <label class="requiredLabel">聯絡手機</label>
-            <input id="phone" class="control" type="tel" inputmode="numeric" autocomplete="tel" maxlength="10" placeholder="0912345678" required>
-            <div class="fieldHint">主要以 LINE 訊息聯繫為主，非必要不會使用電話聯繫</div>
-          </div>
-
-          <div class="field">
             <label id="locationLabel" class="requiredLabel">在哪裡開妝？</label>
             <select id="location" class="control" onchange="toggleArea()" required>
               <option value="">請選擇</option>
@@ -284,10 +278,19 @@
             <div class="helper"></div>
           </div>
 
+          <div id="elevatorField" class="field hidden">
+            <label class="requiredLabel">到府地點是否有電梯？</label>
+            <select id="hasElevator" class="control">
+              <option value="">請選擇</option>
+              <option value="有電梯">有電梯</option>
+              <option value="沒有電梯">沒有電梯</option>
+            </select>
+          </div>
+
           <div id="registrationExtra" class="hidden">
             <div class="field">
               <label class="requiredLabel">妝造風格</label>
-              <input id="registrationStyle" class="control" type="text" placeholder="可以再多說一點喜歡的感覺；有範例照片會更好，預約送出後直接傳到 LINE 給巧克力就可以 ♡" required>
+              <input id="registrationStyle" class="control" type="text" placeholder="可愛／日系／清新／韓系／亞裔混血…，可詳細說明；也可以預約後私訊範例圖給巧克力 ♡" required>
               <div class="fieldHint">LINE</div>
             </div>
 
@@ -322,7 +325,7 @@
           <div id="makeoverExtra" class="hidden">
             <div class="field">
               <label class="requiredLabel">妝造風格</label>
-              <input id="makeupStyle" class="control" type="text" placeholder="可以再多說一點喜歡的感覺；有範例照片會更好，預約送出後直接傳到 LINE 給巧克力就可以 ♡" required>
+              <input id="makeupStyle" class="control" type="text" placeholder="可愛／日系／清新／韓系／亞裔混血…，可詳細說明；也可以預約後私訊範例圖給巧克力 ♡" required>
               <div class="fieldHint">LINE</div>
             </div>
 
@@ -351,18 +354,9 @@
           </div>
 
           <div id="weddingExtra" class="hidden">
-            <div id="elevatorField" class="field hidden">
-              <label class="requiredLabel">到府地點有電梯嗎？</label>
-              <select id="hasElevator" class="control" required>
-                <option value="">請選擇</option>
-                <option value="有電梯">有電梯</option>
-                <option value="沒有電梯">沒有電梯</option>
-              </select>
-            </div>
-
             <div class="field">
               <label class="requiredLabel">妝造風格</label>
-              <input id="weddingStyle" class="control" type="text" placeholder="可以先簡單描述想要的方向；參考照片之後直接傳 LINE 給巧克力會更清楚 ♡" required>
+              <input id="weddingStyle" class="control" type="text" placeholder="可愛／日系／清新／韓系／亞裔混血…，可詳細說明；也可以預約後私訊範例圖給巧克力 ♡" required>
             </div>
 
             <div class="field">
@@ -373,7 +367,10 @@
 
           <div id="noteField" class="field">
             <label><span style="font-weight: 400; color: #9a7c6d;">有沒有一定要先告訴巧克力的事？</span>（選填）</label>
-            <textarea id="note" class="control" rows="3" placeholder="1200 字以內"></textarea>
+            <div id="weddingLightPhotoHint" class="fieldHint hidden" style="margin: 0 0 8px;">
+              （若想拍攝輕婚紗，以至於無需全日跟妝，請於上方預約時間中加上輕婚紗拍攝所需時長（ex:男女妝髮8:00-12:00，輕婚紗拍攝12:00-13:00，直接預約8:00-13:00），並於備註欄註明「需要輕婚紗報價」，謝謝🙏）
+            </div>
+            <textarea id="note" class="control" rows="3" placeholder="其他補充"></textarea>
           </div>
 
           <div class="oaCard" id="photoHintBlock">
@@ -575,20 +572,22 @@
       const now = new Date();
       const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
       const minDate = localDateString(tomorrow);
-      if (value < minDate) {
+
+      // 明天之後皆可正常選擇；只有今天或過去日期才自動調整。
+      if (value >= minDate) {
         suppressDateModal = false;
         return true;
       }
+
       el.value = minDate;
       $('hour').value = '';
-      $('minute').value = '';
+      $('minute').value = '00';
       if (!suppressDateModal) {
         suppressDateModal = true;
         showBrandModal('日期已調整', '今天的魔法時段已經收單囉🪄 請幫我選明天之後的日期。', '🪄', '好的', null, () => { suppressDateModal = false; });
-        setTimeout(() => { try { el.showPicker(); } catch {} el.focus(); }, 120);
         return false;
       }
-      return true;
+      return false;
     }
 
     function preventPastDate() {
@@ -783,46 +782,64 @@
         showBrandModal('目前未開放', names[id] + ' 目前暫不開放預約，請選擇其他服務。', '🪄', '好的');
         return;
       }
+
       serviceId = id;
-      setTimeout(syncConditionalRequired, 0);
       switchView('services', 'formPage', 'fwd');
       $('result').innerHTML = '';
       $('formTitle').textContent = names[id];
-      $('peopleFields').classList.toggle('hidden', id === 'lesson');
-      $('setField').classList.add('hidden');
+
+      // 拍婚紗以「妝造套數」為主要數量欄位；一對一不顯示人數。
+      $('peopleFields').classList.toggle('hidden', id === 'lesson' || id === 'wedding');
+      $('setField').classList.toggle('hidden', id !== 'wedding');
+      $('peopleLabel').textContent = id === 'makeover' ? '人數／性別' : '今天要變漂亮的人數';
+
       $('female').value = '1';
       $('male').value = '0';
       $('sets').value = '1';
-      $('location').innerHTML = id === 'lesson'
-        ? '<option value="">請選擇</option><option value="工作室">工作室</option>'
-        : id === 'makeover'
-          ? '<option value="">請選擇</option><option value="到府服務／自選地點">到府服務／自選地點</option><option value="工作室">工作室</option>'
-          : '<option value="">請選擇</option><option value="到府服務／自選地點">到府服務／自選地點</option><option value="工作室">工作室</option><option value="外拍景點">外拍景點</option>';
+
+      // 依目前服務規則提供地點。
+      if (id === 'makeover') {
+        $('location').innerHTML =
+          '<option value="">請選擇</option>' +
+          '<option value="忠孝復興工作室">忠孝復興工作室</option>' +
+          '<option value="鶯歌工作室">鶯歌工作室</option>' +
+          '<option value="到府服務／自選地點">到府服務</option>';
+      } else if (id === 'lesson') {
+        $('location').innerHTML =
+          '<option value="">請選擇</option>' +
+          '<option value="忠孝復興工作室">忠孝復興工作室</option>' +
+          '<option value="鶯歌工作室">鶯歌工作室</option>';
+      } else {
+        $('location').innerHTML =
+          '<option value="">請選擇</option>' +
+          '<option value="忠孝復興工作室">忠孝復興工作室</option>' +
+          '<option value="到府服務／自選地點">到府服務</option>';
+      }
 
       $('registrationExtra').classList.toggle('hidden', id !== 'registration');
       $('makeoverExtra').classList.toggle('hidden', id !== 'makeover');
       $('weddingExtra').classList.toggle('hidden', id !== 'wedding');
+
       $('timeField').classList.toggle('hidden', id === 'lesson');
-      $('locationLabel').textContent = id === 'lesson' ? '地點' : '在哪裡開妝？';
+      $('locationLabel').textContent = id === 'lesson' ? '在哪裡學習？' : '在哪裡開妝？';
       if ($('noteField')) $('noteField').classList.toggle('hidden', id === 'lesson');
+      if ($('weddingLightPhotoHint')) $('weddingLightPhotoHint').classList.toggle('hidden', id !== 'wedding');
       if ($('photoHintBlock')) $('photoHintBlock').classList.toggle('hidden', id === 'lesson');
 
       if (id === 'lesson') {
         $('hour').value = '11';
         $('minute').value = '00';
+      } else {
+        $('hour').value = '';
+        $('minute').value = '00';
       }
 
       toggleArea();
+      syncConditionalRequired();
       loadDayOccupancy(true);
       refreshAllowedTimeOptions();
       scheduleCheck();
       window.scrollTo({ top: 0, behavior: 'smooth' });
-
-      if ($('phone')) {
-        $('phone').addEventListener('input', e => {
-          e.target.value = e.target.value.replace(/[^0-9]/g, '').slice(0, 10);
-        });
-      }
     }
 
     function backToServices() {
@@ -860,15 +877,21 @@
         if (el) el.required = isWedding;
       });
 
-      if ($('hasElevator')) $('hasElevator').required = isWedding && isHome;
+      if ($('hasElevator')) $('hasElevator').required = isHome;
       if ($('area')) $('area').required = isHome;
+      if ($('sets')) $('sets').required = isWedding;
     }
 
     function toggleArea() {
-      syncConditionalRequired();
       const isHome = $('location').value === '到府服務／自選地點';
       $('areaField').classList.toggle('hidden', !isHome);
-      if ($('elevatorField')) $('elevatorField').classList.toggle('hidden', !(serviceId === 'wedding' && isHome));
+      if ($('elevatorField')) $('elevatorField').classList.toggle('hidden', !isHome);
+
+      if (!isHome) {
+        $('area').value = '';
+        if ($('hasElevator')) $('hasElevator').value = '';
+      }
+      syncConditionalRequired();
     }
 
     function validateLessonDate() {
@@ -1150,12 +1173,15 @@
 
     function validateRequiredFields() {
       const missing = [];
+
       if (!$('date').value) missing.push('日期');
       if (serviceId !== 'lesson' && (!$('hour').value || !$('minute').value)) missing.push('時間');
       if (!$('name').value.trim()) missing.push('姓名');
-      if (!$('phone').value.trim()) missing.push('手機');
-      if (!$('location').value) missing.push('開妝地點');
-      if ($('location').value === '到府服務／自選地點' && !$('area').value.trim()) missing.push('開妝詳細地點');
+      if (!$('location').value) missing.push(serviceId === 'lesson' ? '學習地點' : '開妝地點');
+
+      const isHome = $('location').value === '到府服務／自選地點';
+      if (isHome && !$('area').value.trim()) missing.push('到府地點');
+      if (isHome && !$('hasElevator').value) missing.push('是否有電梯');
 
       if (serviceId === 'registration') {
         if (!$('registrationStyle').value.trim()) missing.push('妝造風格');
@@ -1172,12 +1198,13 @@
       }
 
       if (serviceId === 'wedding') {
+        if (!$('sets').value || Number($('sets').value) < 1) missing.push('妝造套數');
         if (!$('weddingStyle').value.trim()) missing.push('妝造風格');
         if (!$('weddingShootLocation').value.trim()) missing.push('婚紗拍攝地點');
-        if ($('location').value === '到府服務／自選地點' && !$('hasElevator').value) missing.push('到府地點有電梯嗎');
       }
 
       if (missing.length) {
+        // 任何錯誤訊息都不再包含手機欄位。
         showBrandModal('請補齊資料', '以下欄位尚未填寫：\n' + missing.join('、'), '🪄', '好的');
         return false;
       }
@@ -1201,7 +1228,7 @@
             <h2>預約資料已成功送出 ♡</h2>
             <p class="successConfirmed">已收到你的預約申請</p>
             <p>${displayDate(r.date, r.time)}</p>
-            <p>${names[p.serviceId]}｜${p.name}｜${p.phone}</p>
+            <p>${names[p.serviceId]}｜${p.name}</p>
           </div>
           <div class="successSection">
             <div class="successSectionTitle">接下來請這樣做：</div>
@@ -1237,7 +1264,6 @@
         action: 'book',
         requestId: makeRequestId(),
         name: $('name').value.trim(),
-        phone: $('phone').value.trim(),
         lineName: lineDisplayName,
         locationType: $('location').value,
         area: $('area').value.trim(),
@@ -1250,26 +1276,22 @@
         makeupPurpose: serviceId === 'makeover' ? $('makeupPurpose').value.trim() : undefined,
         makeoverFollowMakeup: serviceId === 'makeover' ? $('makeoverFollowMakeup').value : undefined,
         accessoryRental: serviceId === 'makeover' ? $('accessoryRental').value : undefined,
-        hasElevator: serviceId === 'wedding' && $('location').value === '到府服務／自選地點' ? $('hasElevator').value : undefined,
+        hasElevator: $('location').value === '到府服務／自選地點' ? $('hasElevator').value : undefined,
         weddingStyle: serviceId === 'wedding' ? $('weddingStyle').value.trim() : undefined,
         weddingShootLocation: serviceId === 'wedding' ? $('weddingShootLocation').value.trim() : undefined,
         idToken: lineIdToken,
         accessToken: lineAccessToken
       });
 
-      if (!p.name || !p.phone || !p.locationType) {
-        notice('bad', '請填寫姓名、手機與開妝地點。');
-        return;
-      }
-      if (!/^09\d{8}$/.test(p.phone)) {
-        notice('bad', '手機號碼請輸入 10 碼，例如 0912345678 ♡');
+      if (!p.name || !p.locationType) {
+        notice('bad', serviceId === 'lesson' ? '請填寫姓名與學習地點。' : '請填寫姓名與開妝地點。');
         return;
       }
       if (p.locationType === '到府服務／自選地點' && !p.area) {
         notice('bad', '請填寫開妝詳細地址或附近地標，以便確認交通距離與報價。');
         return;
       }
-      if (serviceId === 'wedding' && p.locationType === '到府服務／自選地點' && !p.hasElevator) {
+      if (p.locationType === '到府服務／自選地點' && !p.hasElevator) {
         notice('bad', '請選擇到府地點是否有電梯。');
         return;
       }
