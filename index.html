@@ -152,9 +152,9 @@
     }
     .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     .counterLabel { font-size: 11px; color: var(--muted); margin-bottom: 5px; }
-    .counter { display: grid; grid-template-columns: 46px 1fr 46px; min-height: 50px; border: 1px solid #dfc8bb; border-radius: 14px; overflow: hidden; background: #fff; }
-    .counter button { min-height: 50px; border: 0; background: #f8eee8; color: var(--brown); font-size: 20px; line-height: 1; }
-    .counter input { min-width: 0; min-height: 50px; border: 0; text-align: center; background: #fff; font-size: 15px; line-height: 1.45; outline: 0; }
+    .counter { display: grid; grid-template-columns: 42px 1fr 42px; height: 42px; border: 1px solid #dfc8bb; border-radius: 14px; overflow: hidden; background: #fff; }
+    .counter button { height: 42px; border: 0; background: #f8eee8; color: var(--brown); font-size: 20px; line-height: 1; }
+    .counter input { min-width: 0; height: 42px; border: 0; text-align: center; background: #fff; font-size: 15px; line-height: 1.45; outline: 0; }
     .notice { padding: 12px 13px; margin: 2px 0 16px; border-radius: 13px; background: #f6efe9; color: #74594b; font-size: 11.5px; line-height: 1.5; }
     .notice.ok { background: var(--green); color: var(--greenInk); }
     .notice.bad { background: var(--red); color: var(--redInk); }
@@ -334,7 +334,6 @@
           <button class="back" onclick="backToServices()">← 返回</button>
           <h2 id="formTitle"></h2>
           <p></p>
-          <div id="formLineBadge" class="formLineBadge">LINE</div>
         </header>
 
         <div class="formBody">
