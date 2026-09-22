@@ -4,9 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Chocolate 預約管理</title>
-  <link rel="icon" type="image/png" sizes="32x32" href="./favicon.png?v=2">
-  <link rel="shortcut icon" type="image/png" href="./favicon.png?v=2">
-  <link rel="apple-touch-icon" href="./favicon.png?v=2">
+  <link rel="icon" type="image/png" href="/favicon.png">
   <link rel="preconnect" href="https://script.google.com" crossorigin>
   <link rel="preconnect" href="https://script.googleusercontent.com" crossorigin>
   <link rel="dns-prefetch" href="https://script.google.com">
@@ -45,7 +43,7 @@
     .dashboard { display: none; }
     /* 頁面切換的柔和轉場，跟前台 index.html 用同一套邏輯：
        離開的畫面先淡出/微移，結束後才切換 display，新畫面再淡入/微移進場。 */
-    .viewFade { transition: opacity .2s cubic-bezier(.4,0,.2,1), transform .2s cubic-bezier(.4,0,.2,1); }
+    .viewFade { transition: opacity .12s cubic-bezier(.4,0,.2,1), transform .12s cubic-bezier(.4,0,.2,1); }
     .viewFade.fwd-leave { opacity: 0; transform: translateY(-10px) scale(.98); }
     .viewFade.fwd-enter-from { opacity: 0; transform: translateY(16px) scale(.98); }
     .viewFade.back-leave { opacity: 0; transform: translateY(10px) scale(.98); }
@@ -322,9 +320,9 @@
         void showEl.offsetHeight; // 強制 reflow，確保接下來的 class 移除會觸發轉場
         requestAnimationFrame(() => {
           showEl.classList.remove(enterFromClass);
-          setTimeout(() => showEl.classList.remove('viewFade'), 220);
+          setTimeout(() => showEl.classList.remove('viewFade'), 140);
         });
-      }, 170);
+      }, 105);
     }
 
     async function postForm(data) {
@@ -406,6 +404,7 @@
         ['pending', 'confirmed', 'today', 'released'].forEach(k => adminLocalCacheSet(k, data[k] || []));
         sessionStorage.setItem('choco_admin_key', adminKey);
         render(data[filter] || []);
+        warmAdminPages();
       } catch (e) {
         const msg = e.message;
         const authError = /unauthorized|forbidden/i.test(msg);
@@ -423,7 +422,7 @@
         const raw = sessionStorage.getItem('choco_list_' + filter);
         if (!raw) return null;
         const obj = JSON.parse(raw);
-        if (Date.now() - obj.ts > 60000) return null;
+        if (Date.now() - obj.ts > 180000) return null;
         return obj.items;
       } catch {
         return null;
@@ -436,6 +435,17 @@
       } catch {}
     }
 
+    function adminLocalCacheAge(filter) {
+      try {
+        const raw = sessionStorage.getItem('choco_list_' + filter);
+        if (!raw) return Infinity;
+        const obj = JSON.parse(raw);
+        return Date.now() - Number(obj.ts || 0);
+      } catch (_) {
+        return Infinity;
+      }
+    }
+
     function renderFilter(f) {
       const cached = adminLocalCacheGet(f);
       if (cached) {
@@ -443,6 +453,15 @@
         return true;
       }
       return false;
+    }
+
+    function warmAdminPages() {
+      if (!adminKey) return;
+      clearTimeout(warmAdminPages.timer);
+      warmAdminPages.timer = setTimeout(async () => {
+        try { await loadVacationMonth(false); } catch (_) {}
+        setTimeout(() => { loadServiceSettingsAdmin(false).catch(() => {}); }, 250);
+      }, 650);
     }
 
     // 後台四個分頁（待訂金／已確認／今日／已釋放）原本每切一次分頁就要打一次
@@ -574,21 +593,39 @@
     let vacationLoadSeq = 0;
 
     function getVacationCache(month) {
-      const raw = vacationMonthCache[month];
-      if (!raw) return { closedDays: new Set(), timeBlocks: [] };
-      if (Array.isArray(raw)) return { closedDays: new Set(raw), timeBlocks: [] };
+      let raw = vacationMonthCache[month];
+
+      if (!raw) {
+        try {
+          const saved = JSON.parse(sessionStorage.getItem('choco_vacation_' + month) || 'null');
+          if (saved && Date.now() - Number(saved.ts || 0) < 5 * 60 * 1000) {
+            raw = saved;
+            vacationMonthCache[month] = saved;
+          }
+        } catch (_) {}
+      }
+
+      if (!raw) return { closedDays: new Set(), timeBlocks: [], ts: 0 };
+      if (Array.isArray(raw)) return { closedDays: new Set(raw), timeBlocks: [], ts: 0 };
+
       return {
         closedDays: Array.isArray(raw.closedDays) ? new Set(raw.closedDays) : new Set(),
-        timeBlocks: Array.isArray(raw.timeBlocks) ? raw.timeBlocks : []
+        timeBlocks: Array.isArray(raw.timeBlocks) ? raw.timeBlocks : [],
+        ts: Number(raw.ts || 0)
       };
     }
 
     function setVacationCache(month, closedDays, timeBlocks) {
-      vacationMonthCache[month] = {
+      const data = {
         closedDays: Array.from(closedDays),
-        timeBlocks: Array.isArray(timeBlocks) ? timeBlocks : []
+        timeBlocks: Array.isArray(timeBlocks) ? timeBlocks : [],
+        ts: Date.now()
       };
-      return vacationMonthCache[month];
+      vacationMonthCache[month] = data;
+      try {
+        sessionStorage.setItem('choco_vacation_' + month, JSON.stringify(data));
+      } catch (_) {}
+      return data;
     }
 
     function renderTimeBlocks(items) {
@@ -661,8 +698,15 @@
       $('navVacation').classList.toggle('active', page === 'vacation');
       $('navServices').classList.toggle('active', page === 'services');
 
-      if (page === 'vacation') loadVacationMonth();
-      if (page === 'services') loadServiceSettingsAdmin();
+      if (page === 'bookings') {
+        const hasCache = renderFilter(filter);
+        // 有快取就立即顯示；超過 30 秒才在背景同步最新資料。
+        if (!hasCache || adminLocalCacheAge(filter) > 30000) {
+          setTimeout(() => loadDashboard(), 0);
+        }
+      }
+      if (page === 'vacation') loadVacationMonth(false);
+      if (page === 'services') loadServiceSettingsAdmin(false);
     }
 
     function shiftVacationMonth(delta) {
@@ -681,15 +725,18 @@
       return vacationCursor.getFullYear() + '-' + String(vacationCursor.getMonth() + 1).padStart(2, '0');
     }
 
-    async function loadVacationMonth() {
+    async function loadVacationMonth(force = false) {
       const month = monthKey();
       const seq = ++vacationLoadSeq;
       const cached = getVacationCache(month);
-      const hasCache = !!vacationMonthCache[month];
+      const hasCache = !!cached.ts;
 
       closedVacationDates = new Set(cached.closedDays);
       renderVacationCalendar();
       renderTimeBlocks(cached.timeBlocks);
+
+      // 一分鐘內已讀過同月份，直接使用快取；切頁不再重打 Apps Script。
+      if (!force && cached.ts && Date.now() - cached.ts < 60000) return;
 
       try {
         const r = await jsonp({ action: 'admin_vacation_snapshot', adminKey: adminKey, month: month, ts: Date.now() });
@@ -699,17 +746,13 @@
         const closed = (r.data && r.data.closedDays || []).map(x => typeof x === 'string' ? x : x.date).filter(Boolean);
         const blocks = r.data && r.data.timeBlocks || [];
 
-        setVacationCache(month, closed, blocks);
+        setVacationCache(month, new Set(closed), blocks);
         closedVacationDates = new Set(closed);
         renderVacationCalendar();
         renderTimeBlocks(blocks);
       } catch (e) {
         if (seq !== vacationLoadSeq || month !== monthKey()) return;
-        if (!hasCache) {
-          toast(e.message);
-        } else {
-          toast(e.message);
-        }
+        if (!hasCache) toast(e.message);
       }
     }
 
@@ -800,18 +843,23 @@
       }).join('');
     }
 
-    async function loadServiceSettingsAdmin() {
+    async function loadServiceSettingsAdmin(force = false) {
       const box = $('serviceSettingsList');
       let cached = null;
       try {
         cached = JSON.parse(sessionStorage.getItem('choco_service_settings'));
-      } catch {}
+      } catch (_) {}
+
+      const cacheFresh = cached && Array.isArray(cached.items) && cached.items.length
+        && Date.now() - Number(cached.ts || 0) < 5 * 60 * 1000;
 
       if (cached && Array.isArray(cached.items) && cached.items.length) {
         renderServiceSettingsAdmin(cached.items);
       } else {
         box.innerHTML = '<div class="loading">正在讀取服務設定…</div>';
       }
+
+      if (!force && cacheFresh) return;
 
       try {
         const r = await jsonp({ action: 'admin_service_settings', adminKey: adminKey });
@@ -821,10 +869,10 @@
         renderServiceSettingsAdmin(items);
         try {
           sessionStorage.setItem('choco_service_settings', JSON.stringify({ ts: Date.now(), items: items }));
-        } catch {}
+        } catch (_) {}
       } catch (e) {
         if (!cached || !cached.items || !cached.items.length) {
-          box.innerHTML = '<div class="empty">讀取失敗。<br><button class="btn restore" style="margin-top: 12px;" onclick="loadServiceSettingsAdmin()">重新載入</button></div>';
+          box.innerHTML = '<div class="empty">讀取失敗。<br><button class="btn restore" style="margin-top: 12px;" onclick="loadServiceSettingsAdmin(true)">重新載入</button></div>';
         } else {
           toast(e.message);
         }
@@ -859,6 +907,7 @@
       $('login').style.display = 'none';
       $('dashboard').style.display = 'block';
       loadDashboard();
+      warmAdminPages();
     }
   </script>
 </body>

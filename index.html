@@ -319,7 +319,7 @@
             <h2>1 對 1 美妝教學</h2>
             <p>從 0 開始、精緻升級，或加強特定妝容技巧都適合。</p>
           </div>
-          <button id="lessonBookBtn" class="bookBtn" onclick="openForm('lesson')" disabled style="opacity: .55;">目前未開放</button>
+          <button id="lessonBookBtn" class="bookBtn" onclick="openForm('lesson')">預約</button>
         </div>
         <div class="oaCard" style="margin: 12px 0 0;">
           🥨 11:00–15:00，一次 4 小時（不接受加時）<br>
@@ -609,7 +609,7 @@
     function showWeddingLightPhotoHint() {
       showBrandModal(
         '想拍輕婚紗🙋🏻‍♀️',
-        '若只需要短時間的輕婚紗拍攝、不需要全日跟妝，可以把拍攝時間一起算進預約時段。\n\n例如：\n妝髮 08:00–12:00\n輕婚紗拍攝 12:00–13:00\n→ 請預約 08:00–13:00\n\n最後在備註寫上「需要輕婚紗報價」即可 ♡',
+        '若只需要短時間的輕婚紗拍攝、不需要全日跟妝，請在備註打上預計開妝時間＋拍攝時間。\n\n例如：\n妝髮 08:00–12:00\n輕婚紗拍攝 12:00–13:00\n\n最後再寫上「需要輕婚紗報價」即可 ♡',
         '👰🏻‍♀️',
         '我知道了'
       );
@@ -1090,8 +1090,10 @@
       return true;
     }
 
-    let serviceSettings = { registration: true, wedding: true, makeover: true, lesson: false };
-    const SERVICE_CACHE_KEY = 'choco_public_service_settings_v1';
+    let serviceSettings = { registration: true, wedding: true, makeover: true, lesson: true };
+    const SERVICE_CACHE_KEY = 'choco_public_service_settings_v2';
+    const SERVICE_CACHE_TTL = 5 * 60 * 1000;
+    let serviceSettingsReady = false;
     let serviceSettingsLoading = null;
     let lastServiceSettingsSync = 0;
     let bootstrapCache = {};
@@ -1115,8 +1117,9 @@
     function restoreServiceSettingsCache() {
       try {
         const cached = JSON.parse(localStorage.getItem(SERVICE_CACHE_KEY));
-        if (cached && cached.items && Date.now() - cached.ts < 660 * 60 * 1000) {
+        if (cached && cached.items && Date.now() - cached.ts < SERVICE_CACHE_TTL) {
           cached.items.forEach(x => { serviceSettings[x.id] = !!x.enabled; });
+          serviceSettingsReady = true;
           applyServiceSettings();
           return true;
         }
@@ -1142,6 +1145,7 @@
             const items = r.data && r.data.items;
             if (!items || !items.length) throw new Error('empty items');
             items.forEach(x => { serviceSettings[x.id] = !!x.enabled; });
+            serviceSettingsReady = true;
             applyServiceSettings();
             saveServiceSettingsCache(items);
             lastServiceSettingsSync = Date.now();
@@ -2061,7 +2065,13 @@
 
     // ===== 初始化 =====
     initForm();
+
+    // 先用本機最後一次服務設定立即畫出首頁，再背景同步最新狀態。
+    if (!restoreServiceSettingsCache()) {
+      applyServiceSettings();
+    }
     loadServiceSettings(true);
+
     initLiff();
 
     document.addEventListener('visibilitychange', () => {
