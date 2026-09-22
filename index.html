@@ -750,6 +750,24 @@
       return 'choco_month_occ_' + month;
     }
 
+    function invalidateBookingCache(dateKey = '') {
+      try {
+        const month = String(dateKey || '').slice(0, 7);
+        if (month) {
+          delete publicMonthOccupancyCache[month];
+          localStorage.removeItem(monthCacheStorageKey(month));
+        }
+      } catch (_) {}
+
+      try {
+        Object.keys(dayOccupancyCache || {}).forEach(k => {
+          if (!dateKey || k.endsWith('_' + dateKey)) delete dayOccupancyCache[k];
+        });
+      } catch (_) {}
+
+      currentDayOccupancy = null;
+    }
+
     function restoreMonthCache(month) {
       try {
         const raw = JSON.parse(localStorage.getItem(monthCacheStorageKey(month)) || 'null');
@@ -1791,9 +1809,7 @@
         }, 4200);
       }
 
-      publicMonthOccupancyCache = {};
-      dayOccupancyCache = {};
-      currentDayOccupancy = null;
+      invalidateBookingCache(p && p.date ? p.date : '');
 
       $('formPage').style.display = 'none';
 
@@ -1867,6 +1883,58 @@
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
+    function fallbackBookingSuccess(r, p) {
+      try {
+        $('formPage').style.display = 'none';
+        const bookingTime = displayDate(r && r.date, r && r.time);
+        const serviceName = names[p && p.serviceId] || '預約服務';
+
+        $('result').innerHTML = `
+          <section class="successCard">
+            <div class="successCardBody">
+              <div class="successTimeHero">
+                <h2 class="successTimeTitle">時間幫您登記好囉 ♡</h2>
+                <p class="successTimeValue">${serviceName}　${bookingTime}</p>
+              </div>
+              <div class="successBlockCard">
+                <div class="successBlockHead">接下來的流程 ♡</div>
+                <div class="successBlockBody">
+                  預約資料已收到，巧克力會再透過 LINE 與您確認 ♡
+                </div>
+              </div>
+            </div>
+          </section>
+        `;
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } catch (fallbackErr) {
+        console.error('BOOKING SUCCESS FALLBACK ERROR', fallbackErr);
+        alert('時間已成功登記，巧克力會再透過 LINE 與您確認 ♡');
+      }
+    }
+
+    async function confirmSelectedSlotBeforeSubmit(p) {
+      if (!p || !p.date || !p.time) return false;
+
+      try {
+        // 送出前只做一次「最新單日狀態」確認，避免 localStorage/月快取過期。
+        const fresh = await loadDayOccupancy(true);
+
+        // 如果 API 暫時讀不到，最後仍交由後端建立預約時做權威衝突檢查。
+        if (!fresh || !currentDayOccupancy || currentDayOccupancy.date !== p.date) {
+          return true;
+        }
+
+        if (serviceId === 'lesson') {
+          return !currentDayOccupancy.closedDay && !overlapsOccupied('11:00');
+        }
+
+        return isSelectableStartTime(p.time, p.date);
+      } catch (e) {
+        console.warn('PRE-SUBMIT SLOT CHECK WARNING', e);
+        return true;
+      }
+    }
+
     async function submitBooking() {
       if (!validateRequiredFields()) return;
 
@@ -1916,8 +1984,28 @@
 
       const b = $('submit');
       b.disabled = true;
-      b.textContent = '處理中...';
+      b.textContent = '確認時段中...';
       notice('', '');
+
+      // 先確認一次「現在」這個時間仍可預約，避免剛好讀到舊快取。
+      const slotStillAvailable = await confirmSelectedSlotBeforeSubmit(p);
+      if (!slotStillAvailable) {
+        invalidateBookingCache(p.date);
+
+        if (serviceId !== 'lesson') {
+          clearSelectedTime();
+          renderTimePickerLoading();
+          await loadDayOccupancy(true);
+          renderAvailableTimeButtons();
+        }
+
+        notice('bad', '這個時段剛剛已無法預約，已幫您更新最新可選時間 ♡');
+        b.disabled = false;
+        b.textContent = '先預定這個時間 ✦';
+        return;
+      }
+
+      b.textContent = '處理中...';
 
       console.log('BOOKING SUBMIT START', { requestId: p.requestId, serviceId: p.serviceId, date: p.date, time: p.time, hasIdToken: !!p.idToken, hasAccessToken: !!p.accessToken });
 
@@ -1933,11 +2021,38 @@
         // 先輪詢，不等 doPost 整支跑完（LINE push 可能較慢）。
         const r = await pollStatus(p.requestId);
         await Promise.race([postPromise, new Promise(resolve => setTimeout(resolve, 500))]);
+
         console.log('BOOKING STATUS SUCCESS', { requestId: p.requestId, bookingId: r.id });
-        finalizeBookingSuccess(r, p);
+
+        // 到這裡後端已經成功；先清掉舊快取。
+        invalidateBookingCache(p.date);
+
+        // 成功頁就算發生 UI rendering error，也不能再顯示成「預約失敗」。
+        try {
+          finalizeBookingSuccess(r, p);
+        } catch (renderErr) {
+          console.error('BOOKING SUCCESS RENDER ERROR', renderErr);
+          fallbackBookingSuccess(r, p);
+        }
+
+        return;
       } catch (e) {
         console.error('BOOKING SUBMIT ERROR', e);
-        notice('bad', e.message || '預約失敗，請稍後再試。');
+
+        const msg = e && e.message ? e.message : '預約失敗，請稍後再試。';
+
+        // 若是時段衝突，清掉所有舊快取並立即刷新該日可選時段。
+        if (/時段|衝突|額滿|已被|無法預約/.test(msg)) {
+          invalidateBookingCache(p.date);
+          if (serviceId !== 'lesson') {
+            clearSelectedTime();
+            renderTimePickerLoading();
+            await loadDayOccupancy(true);
+            renderAvailableTimeButtons();
+          }
+        }
+
+        notice('bad', msg);
       } finally {
         b.disabled = false;
         b.textContent = '先預定這個時間 ✦';
