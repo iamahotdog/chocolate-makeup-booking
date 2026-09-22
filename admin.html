@@ -310,11 +310,11 @@
       });
     }
 
-    async function jsonp(params, retries = 1, timeoutMs = 8000) {
+    async function jsonp(params, retries = 2, timeoutMs = 15000) {
       let lastErr = null;
       for (let i = 0; i < retries; i++) {
         try {
-          return await jsonpOnce(params, i === 0 ? timeoutMs : Math.max(timeoutMs, 10000));
+          return await jsonpOnce(params, i === 0 ? timeoutMs : Math.max(timeoutMs, 20000));
         } catch (e) {
           lastErr = e;
           if (i < retries - 1) await new Promise(r => setTimeout(r, 350 + 250 * i));
@@ -348,7 +348,7 @@
       }
 
       try {
-        const r = await jsonp({ action: 'admin_list', adminKey: adminKey, filter: 'pending' });
+        const r = await jsonp({ action: 'admin_list', adminKey: adminKey, filter: 'pending' }, 2, 15000);
         if (!r.ok) throw new Error(r.data && r.data.error ? r.data.error.message : r.message);
         const items = r.data && r.data.items;
         sessionStorage.setItem('choco_admin_key', adminKey);
@@ -400,7 +400,7 @@
       }
 
       try {
-        const r = await jsonp({ action: 'admin_list', adminKey: adminKey, filter: filter });
+        const r = await jsonp({ action: 'admin_list', adminKey: adminKey, filter: filter }, 2, 15000);
         if (seq !== adminLoadSeq) return;
         if (!r.ok) {
           if (r.data && r.data.error) throw new Error(r.data.error.message);
@@ -630,7 +630,7 @@
       renderTimeBlocks(cached.timeBlocks);
 
       try {
-        const r = await jsonp({ action: 'admin_vacation_snapshot', adminKey: adminKey, month: month, ts: Date.now() });
+        const r = await jsonp({ action: 'admin_vacation_snapshot', adminKey: adminKey, month: month, ts: Date.now() }, 2, 15000);
         if (seq !== vacationLoadSeq || month !== monthKey()) return;
         if (!r.ok) throw new Error(r.data && r.data.error ? r.data.error.message : r.message);
 
@@ -752,7 +752,7 @@
       }
 
       try {
-        const r = await jsonp({ action: 'admin_service_settings', adminKey: adminKey, retries: 1, timeoutMs: 7000 });
+        const r = await jsonp({ action: 'admin_service_settings', adminKey: adminKey }, 2, 15000);
         if (!r.ok) throw new Error(r.data && r.data.error ? r.data.error.message : r.message);
         const items = r.data && r.data.items;
         if (!items || !items.length) throw new Error('未取得服務設定');
