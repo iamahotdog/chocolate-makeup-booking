@@ -136,7 +136,7 @@
 
     <section id="services" class="services">
       <article class="service">
-        <div class="icon">💍</div>
+        <div class="icon">🥨</div>
         <div class="serviceText">
           <h2>登記妝髮</h2>
           <p>登記結婚妝髮。</p>
@@ -146,17 +146,17 @@
       </article>
 
       <article class="service">
-        <div class="icon">👰</div>
+        <div class="icon">👰🏻‍♀️</div>
         <div class="serviceText">
           <h2>拍婚紗專區</h2>
-          <p>拍婚紗妝髮。<span class="serviceNote">暫不提供婚禮當日妝髮服務</span></p>
+          <p>暫不提供婚禮當日妝髮服務</p>
           <span class="meta">女生約 3 小時／男生約 1 小時</span>
         </div>
         <button class="bookBtn" onclick="openForm('wedding')">預約</button>
       </article>
 
       <article class="service">
-        <div class="icon">🪄</div>
+        <div class="icon">✨</div>
         <div class="serviceText">
           <h2>妝髮換頭魔法</h2>
           <p>約會、參加婚宴、活動、拍攝等單次妝髮。</p>
@@ -167,16 +167,16 @@
 
       <article class="service" style="display: block;">
         <div style="display: flex; align-items: center; gap: 13px;">
-          <div class="icon">🥨</div>
+          <div class="icon">🍮</div>
           <div class="serviceText">
             <h2>1 對 1 美妝教學</h2>
-            <p id="lessonStatusText">目前未開放</p>
-            <span class="meta">🥨 11:00–15:00，一次 4 小時（不接受加時）<br>❗ 目前僅開放假日預約；若因職業或個人因素僅能平日／假日晚間，再私訊巧克力討論</span>
+            <p>從 0 開始、精緻升級，或加強特定妝容技巧都適合。</p>
           </div>
-          <button id="lessonBookBtn" class="bookBtn" onclick="openForm('lesson')" disabled style="opacity: .55;">預約</button>
+          <button id="lessonBookBtn" class="bookBtn" onclick="openForm('lesson')" disabled style="opacity: .55;">目前未開放</button>
         </div>
-        <div class="oaCard" style="margin: 12px 0 0 110px;">
-          從 0 開始、精緻升級，或加強特定妝容技巧都適合。
+        <div class="oaCard" style="margin: 12px 0 0;">
+          🥨 11:00–15:00，一次 4 小時（不接受加時）<br>
+          ❗ 目前僅開放假日預約；若因職業或個人因素僅能平日／假日晚間，再私訊巧克力討論
         </div>
       </article>
     </section>
@@ -654,14 +654,10 @@
         }
       });
       const lessonBtn = $('lessonBookBtn');
-      const lessonText = $('lessonStatusText');
       if (lessonBtn) {
         lessonBtn.disabled = !serviceSettings.lesson;
         lessonBtn.style.opacity = serviceSettings.lesson ? '1' : '.55';
         lessonBtn.textContent = serviceSettings.lesson ? '預約' : '目前未開放';
-      }
-      if (lessonText) {
-        lessonText.textContent = serviceSettings.lesson ? '11:00–15:00，一次 4 小時（不接受加時）' : '目前未開放';
       }
     }
 
