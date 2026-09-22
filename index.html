@@ -209,14 +209,19 @@
     .successMeta { margin: 18px 0 0; padding: 14px 16px; border-radius: 18px; background: #fffdfb; border: 1px solid #ead7cc; }
     .successMetaLine { margin: 0; color: var(--brown); font-size: 13.5px; line-height: 1.85; }
     .successMetaLine strong { color: var(--ink); }
-    .successBlockCard { margin-top: 18px; border: 1px solid #e3c9ba; border-radius: 20px; overflow: hidden; background: #fff; }
+    .successBlockCard { margin-top: 14px; border: 1px solid #e3c9ba; border-radius: 20px; overflow: hidden; background: #fff; }
     .successBlockHead { padding: 14px 16px; background: linear-gradient(#986041, #875237); color: #fffaf6; font-size: 16px; font-weight: 800; }
-    .successBlockBody { padding: 16px; color: #6d4a3e; font-size: 13px; line-height: 1.9; background: #fffdfb; }
+    .successBlockBody { padding: 15px 16px; color: #6d4a3e; font-size: 13px; line-height: 1.68; background: #fffdfb; }
     .successBlockBody ol { margin: 0; padding-left: 22px; }
-    .successBlockBody li { margin: 0 0 8px; }
+    .successBlockBody li { margin: 0 0 5px; }
     .successBlockBody li:last-child { margin-bottom: 0; }
-    .successDivider { margin: 14px 0; border: 0; border-top: 1px dashed #e0cbbb; }
+    .successDivider { margin: 11px 0; border: 0; border-top: 1px dashed #e0cbbb; }
     .successStrong { color: var(--ink); font-weight: 800; }
+    .successTimeHero { padding: 2px 0 2px; }
+    .successTimeTitle { margin: 0 0 7px; font-size: 22px; line-height: 1.35; }
+    .successTimeValue { margin: 0; color: var(--brown); font-size: 15px; font-weight: 800; line-height: 1.55; }
+    .successPhotoList { margin: 8px 0 0; padding: 0; list-style: none; }
+    .successPhotoList li { margin: 4px 0; }
     .quickTipBtn { display: inline-flex; align-items: center; gap: 6px; margin: 2px 0 10px; padding: 0; border: 0; background: none; color: var(--brown); font-size: 12px; font-weight: 800; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
     .requiredLabel::after { content: ' *'; color: #a95f4c; font-weight: 800; }
     .serviceNote { display: block; margin-top: 3px; color: #b37462; font-size: 9.5px; line-height: 1.45; }
@@ -528,7 +533,7 @@
 
     <div id="bookingSuccessToast" class="bookingSuccessToast" role="status" aria-live="polite">
       <span class="bookingSuccessDot">✓</span>
-      <span>預約資料已成功送出 ♡</span>
+      <span>時間幫您登記好囉 ♡</span>
     </div>
   </main>
 
@@ -1785,40 +1790,33 @@
       $('formPage').style.display = 'none';
 
       const bookingTime = displayDate(r.date, r.time);
-      const serviceName = names[p.serviceId] || '預約服務';
-      const servicePlaceLabel = p.serviceId === 'lesson' ? '學習地點' : '開妝地點';
-      const servicePlaceValue = p.area ? (p.locationType + '｜' + p.area) : (p.locationType || '待確認');
 
       if (p.serviceId === 'lesson') {
         $('result').innerHTML = `
           <section class="successCard">
             <div class="successCardBody">
-              <div class="successBadge"><span class="successBadgeDot">✓</span><span>預約資料已送出</span></div>
-              <h2 class="successMainTitle">期待巧克力施魔法的日子 ♡</h2>
-              <p class="successLead">時間先幫您登記好囉，巧克力接下來會依序與你確認。</p>
 
-              <div class="successMeta">
-                <p class="successMetaLine"><strong>服務：</strong>${serviceName}</p>
-                <p class="successMetaLine"><strong>預約時間：</strong>${bookingTime}</p>
-                <p class="successMetaLine"><strong>姓名：</strong>${p.name}</p>
-                <p class="successMetaLine"><strong>${servicePlaceLabel}：</strong>${servicePlaceValue}</p>
+              <div class="successTimeHero">
+                <h2 class="successTimeTitle">時間幫您登記好囉 ♡</h2>
+                <p class="successTimeValue">${bookingTime}</p>
               </div>
 
               <div class="successBlockCard">
                 <div class="successBlockHead">接下來的流程 ♡</div>
                 <div class="successBlockBody">
-                  巧克力會先跟你確認預約時間及地點，再收到訂金後會傳課前問答給你🥨
+                  巧克力會和您確認預約時間與地點，收到訂金後會傳上課前問答給您 🪄◝✩
                 </div>
               </div>
 
               <div class="successBlockCard">
-                <div class="successBlockHead">檔期保留方式</div>
+                <div class="successBlockHead">檔期保留方式 ♡</div>
                 <div class="successBlockBody">
-                  若同一時段有不同人詢問，將以 <span class="successStrong">先完成訂金支付者</span> 為優先預約成功的對象。
+                  若同一時段有不同人詢問，將以「<span class="successStrong">先完成訂金支付者</span>」為優先預約成功對象。
                   <hr class="successDivider">
-                  <span class="successStrong">記得要完成訂金支付，才會真正保留這個時段喔 ♡</span>
+                  <span class="successStrong">記得要完成訂金支付，才會真正保留這個時段喔!!</span>
                 </div>
               </div>
+
             </div>
           </section>
         `;
@@ -1826,33 +1824,33 @@
         $('result').innerHTML = `
           <section class="successCard">
             <div class="successCardBody">
-              <div class="successBadge"><span class="successBadgeDot">✓</span><span>已收到你的預約申請</span></div>
-              <h2 class="successMainTitle">預約資料已成功送出 ♡</h2>
-              <p class="successLead">先把漂亮的時間留給你，巧克力會盡快與你確認預約內容與報價。</p>
 
-              <div class="successMeta">
-                <p class="successMetaLine"><strong>服務：</strong>${serviceName}</p>
-                <p class="successMetaLine"><strong>預約時間：</strong>${bookingTime}</p>
-                <p class="successMetaLine"><strong>姓名：</strong>${p.name}</p>
+              <div class="successTimeHero">
+                <h2 class="successTimeTitle">時間幫您登記好囉 ♡</h2>
+                <p class="successTimeValue">${bookingTime}</p>
               </div>
 
               <div class="successBlockCard">
-                <div class="successBlockHead">接下來請這樣做 ♡</div>
+                <div class="successBlockHead">接下來的流程 ♡</div>
                 <div class="successBlockBody">
-                  <ol>
-                    <li>巧克力會盡快確認你的預約時段與報價。</li>
-                    <li>確認後會回 LINE 通知你，並告知訂金金額與付款方式。</li>
-                    <li>完成訂金後，你的時段就正式保留完成 ♡</li>
-                  </ol>
+                  再次謝謝您的點菜－( ˶^ᵕ'˶)b<br>
+                  請耐心等候巧克力回覆，後續確認妝造細節時，再麻煩您提供以下照片：
+                  <ul class="successPhotoList">
+                    <li>🍞 1 張面光、清楚的素顏照</li>
+                    <li>🥐 2 張能清楚看見五官的生活照</li>
+                  </ul>
                 </div>
               </div>
 
               <div class="successBlockCard">
-                <div class="successBlockHead">訂金規則</div>
+                <div class="successBlockHead">檔期保留方式 ♡</div>
                 <div class="successBlockBody">
-                  訂金將保留你的預約時段，若因個人因素取消，訂金恕不退還；若因巧克力因素無法服務，將全額退還。
+                  若同一時段有不同人詢問，將以「<span class="successStrong">先完成訂金支付者</span>」為優先預約成功對象。
+                  <hr class="successDivider">
+                  <span class="successStrong">記得要完成訂金支付，才會真正保留這個時段喔!!</span>
                 </div>
               </div>
+
             </div>
           </section>
         `;
