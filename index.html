@@ -123,6 +123,25 @@
     .nextSteps li { margin: 7px 0; line-height: 1.65; font-size: 13px; }
     .depositRule { margin-top: 15px; padding: 14px 15px; border-radius: 16px; background: #f8eee8; border: 1px solid #e3c9ba; color: #6f4d3f; font-size: 12.5px; line-height: 1.7; }
     .depositRule b { color: var(--ink); }
+
+    .successCard { margin: 24px 16px; padding: 0; border: 1px solid #ead7cc; border-radius: 28px; background: #fffaf6; color: var(--ink); box-shadow: var(--shadow); overflow: hidden; }
+    .successCardBody { padding: 22px 20px 20px; }
+    .successBadge { display: inline-flex; align-items: center; gap: 7px; margin-bottom: 14px; padding: 8px 12px; border-radius: 999px; background: #f4e3da; color: #754634; font-size: 11px; font-weight: 800; }
+    .successBadgeDot { width: 20px; height: 20px; display: grid; place-items: center; border-radius: 50%; background: #ead9cf; color: #6d4230; font-size: 13px; }
+    .successMainTitle { margin: 0 0 10px; font-size: 22px; line-height: 1.35; }
+    .successLead { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.8; }
+    .successMeta { margin: 18px 0 0; padding: 14px 16px; border-radius: 18px; background: #fffdfb; border: 1px solid #ead7cc; }
+    .successMetaLine { margin: 0; color: var(--brown); font-size: 13.5px; line-height: 1.85; }
+    .successMetaLine strong { color: var(--ink); }
+    .successBlockCard { margin-top: 18px; border: 1px solid #e3c9ba; border-radius: 20px; overflow: hidden; background: #fff; }
+    .successBlockHead { padding: 14px 16px; background: linear-gradient(#986041, #875237); color: #fffaf6; font-size: 16px; font-weight: 800; }
+    .successBlockBody { padding: 16px; color: #6d4a3e; font-size: 13px; line-height: 1.9; background: #fffdfb; }
+    .successBlockBody ol { margin: 0; padding-left: 22px; }
+    .successBlockBody li { margin: 0 0 8px; }
+    .successBlockBody li:last-child { margin-bottom: 0; }
+    .successDivider { margin: 14px 0; border: 0; border-top: 1px dashed #e0cbbb; }
+    .successStrong { color: var(--ink); font-weight: 800; }
+    .quickTipBtn { display: inline-flex; align-items: center; gap: 6px; margin: 2px 0 10px; padding: 0; border: 0; background: none; color: var(--brown); font-size: 12px; font-weight: 800; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
     .requiredLabel::after { content: ' *'; color: #a95f4c; font-weight: 800; }
     .serviceNote { display: block; margin-top: 3px; color: #b37462; font-size: 9.5px; line-height: 1.45; }
     .successConfirmed { display: inline-block; margin: 2px 0 8px; padding: 6px 11px; border-radius: 999px; background: #f4e3da; color: #754634; font-size: 11px; font-weight: 800; }
@@ -393,9 +412,7 @@
 
           <div id="noteField" class="field">
             <label><span style="font-weight: 400; color: #9a7c6d;">有沒有一定要先告訴巧克力的事？</span>（選填）</label>
-            <div id="weddingLightPhotoHint" class="fieldHint hidden" style="margin: 0 0 8px;">
-              （若想拍攝輕婚紗，以至於無需全日跟妝，請於上方預約時間中加上輕婚紗拍攝所需時長（ex:男女妝髮8:00-12:00，輕婚紗拍攝12:00-13:00，直接預約8:00-13:00），並於備註欄註明「需要輕婚紗報價」，謝謝🙏）
-            </div>
+            <button type="button" id="weddingLightPhotoHintBtn" class="quickTipBtn hidden" onclick="showWeddingLightPhotoHint()">我想拍攝輕婚紗 👰🏻‍♀️</button>
             <textarea id="note" class="control" rows="3" placeholder="其他補充"></textarea>
           </div>
 
@@ -477,6 +494,15 @@
     function hideBrandModal() {
       $('brandModal').classList.remove('show');
       document.body.classList.remove('modalOpen');
+    }
+
+    function showWeddingLightPhotoHint() {
+      showBrandModal(
+        '我想拍攝輕婚紗 👰🏻‍♀️',
+        '若想拍攝輕婚紗，以至於無需全日跟妝，請於上方預約時間中加上輕婚紗拍攝所需時長（ex: 男女妝髮 8:00-12:00，輕婚紗拍攝 12:00-13:00，直接預約 8:00-13:00），並於備註欄註明「需要輕婚紗報價」，謝謝🙏',
+        '👰🏻‍♀️',
+        '我知道了'
+      );
     }
 
     async function refreshLineIdentity() {
@@ -1095,7 +1121,7 @@
       $('timeField').classList.toggle('hidden', id === 'lesson');
       $('locationLabel').textContent = id === 'lesson' ? '在哪裡學習？' : '在哪裡開妝？';
       if ($('noteField')) $('noteField').classList.toggle('hidden', id === 'lesson');
-      if ($('weddingLightPhotoHint')) $('weddingLightPhotoHint').classList.toggle('hidden', id !== 'wedding');
+      if ($('weddingLightPhotoHintBtn')) $('weddingLightPhotoHintBtn').classList.toggle('hidden', id !== 'wedding');
       if ($('photoHintBlock')) $('photoHintBlock').classList.toggle('hidden', id === 'lesson');
 
       if (id === 'lesson') {
@@ -1529,44 +1555,74 @@
 
       $('formPage').style.display = 'none';
 
+      const bookingTime = displayDate(r.date, r.time);
+      const serviceName = names[p.serviceId] || '預約服務';
+      const servicePlaceLabel = p.serviceId === 'lesson' ? '學習地點' : '開妝地點';
+      const servicePlaceValue = p.area ? (p.locationType + '｜' + p.area) : (p.locationType || '待確認');
+
       if (p.serviceId === 'lesson') {
         $('result').innerHTML = `
-          <section class="successWarm">
-            <div class="successHero">
-              <h2>預約資料已成功送出 ♡</h2>
-              <p class="successConfirmed">已收到你的預約申請</p>
-              <p>${displayDate(r.date, r.time)}</p>
-              <p>${names[p.serviceId]}｜${p.name}</p>
-            </div>
-            <div class="nextSteps">
-              <h3>接下來的流程</h3>
-              <p style="margin:0; font-size:13px; line-height:1.75;">
-                巧克力會先跟你確認預約時間及地點，收到訂金後會傳課前問答給你 🥨
-              </p>
+          <section class="successCard">
+            <div class="successCardBody">
+              <div class="successBadge"><span class="successBadgeDot">✓</span><span>預約資料已送出</span></div>
+              <h2 class="successMainTitle">期待巧克力施魔法的日子 ♡</h2>
+              <p class="successLead">時間先幫您登記好囉，巧克力接下來會依序與你確認。</p>
+
+              <div class="successMeta">
+                <p class="successMetaLine"><strong>服務：</strong>${serviceName}</p>
+                <p class="successMetaLine"><strong>預約時間：</strong>${bookingTime}</p>
+                <p class="successMetaLine"><strong>姓名：</strong>${p.name}</p>
+                <p class="successMetaLine"><strong>${servicePlaceLabel}：</strong>${servicePlaceValue}</p>
+              </div>
+
+              <div class="successBlockCard">
+                <div class="successBlockHead">接下來的流程 ♡</div>
+                <div class="successBlockBody">
+                  巧克力會先跟你確認預約時間及地點，再收到訂金後會傳課前問答給你🥨
+                </div>
+              </div>
+
+              <div class="successBlockCard">
+                <div class="successBlockHead">檔期保留方式</div>
+                <div class="successBlockBody">
+                  若同一時段有不同人詢問，將以 <span class="successStrong">先完成訂金支付者</span> 為優先預約成功的對象。
+                  <hr class="successDivider">
+                  <span class="successStrong">記得要完成訂金支付，才會真正保留這個時段喔 ♡</span>
+                </div>
+              </div>
             </div>
           </section>
         `;
       } else {
         $('result').innerHTML = `
-          <section class="successWarm">
-            <div class="successHero">
-              <h2>預約資料已成功送出 ♡</h2>
-              <p class="successConfirmed">已收到你的預約申請</p>
-              <p>${displayDate(r.date, r.time)}</p>
-              <p>${names[p.serviceId]}｜${p.name}</p>
-            </div>
-            <div class="successSection">
-              <div class="successSectionTitle">接下來請這樣做：</div>
-              <div class="successSectionBody">
-                <ol>
-                  <li>巧克力會盡快確認你的預約時段與報價。</li>
-                  <li>確認後會回 LINE 通知你，並告知訂金金額與付款方式。</li>
-                  <li>完成訂金後，你的時段就正式保留完成 ♡</li>
-                </ol>
-                <p class="depositRule">
-                  <b>訂金規則：</b><br>
+          <section class="successCard">
+            <div class="successCardBody">
+              <div class="successBadge"><span class="successBadgeDot">✓</span><span>已收到你的預約申請</span></div>
+              <h2 class="successMainTitle">預約資料已成功送出 ♡</h2>
+              <p class="successLead">先把漂亮的時間留給你，巧克力會盡快與你確認預約內容與報價。</p>
+
+              <div class="successMeta">
+                <p class="successMetaLine"><strong>服務：</strong>${serviceName}</p>
+                <p class="successMetaLine"><strong>預約時間：</strong>${bookingTime}</p>
+                <p class="successMetaLine"><strong>姓名：</strong>${p.name}</p>
+              </div>
+
+              <div class="successBlockCard">
+                <div class="successBlockHead">接下來請這樣做 ♡</div>
+                <div class="successBlockBody">
+                  <ol>
+                    <li>巧克力會盡快確認你的預約時段與報價。</li>
+                    <li>確認後會回 LINE 通知你，並告知訂金金額與付款方式。</li>
+                    <li>完成訂金後，你的時段就正式保留完成 ♡</li>
+                  </ol>
+                </div>
+              </div>
+
+              <div class="successBlockCard">
+                <div class="successBlockHead">訂金規則</div>
+                <div class="successBlockBody">
                   訂金將保留你的預約時段，若因個人因素取消，訂金恕不退還；若因巧克力因素無法服務，將全額退還。
-                </p>
+                </div>
               </div>
             </div>
           </section>
