@@ -1091,8 +1091,8 @@
     }
 
     let serviceSettings = { registration: true, wedding: true, makeover: true, lesson: true };
-    const SERVICE_CACHE_KEY = 'choco_public_service_settings_v2';
-    const SERVICE_CACHE_TTL = 5 * 60 * 1000;
+    const SERVICE_CACHE_KEY = 'choco_public_service_settings_v3';
+    const SERVICE_CACHE_TTL = 30 * 1000;
     let serviceSettingsReady = false;
     let serviceSettingsLoading = null;
     let lastServiceSettingsSync = 0;
@@ -1116,7 +1116,7 @@
 
     function restoreServiceSettingsCache() {
       try {
-        const cached = JSON.parse(localStorage.getItem(SERVICE_CACHE_KEY));
+        const cached = JSON.parse(sessionStorage.getItem(SERVICE_CACHE_KEY));
         if (cached && cached.items && Date.now() - cached.ts < SERVICE_CACHE_TTL) {
           cached.items.forEach(x => { serviceSettings[x.id] = !!x.enabled; });
           serviceSettingsReady = true;
@@ -1129,7 +1129,7 @@
 
     function saveServiceSettingsCache(items) {
       try {
-        localStorage.setItem(SERVICE_CACHE_KEY, JSON.stringify({ ts: Date.now(), items: items }));
+        sessionStorage.setItem(SERVICE_CACHE_KEY, JSON.stringify({ ts: Date.now(), items: items }));
       } catch {}
     }
 
@@ -1750,16 +1750,24 @@
     }
 
     async function pollStatus(requestId) {
-      const waits = [350, 700, 1200, 1800, 2600, 3800];
+      const waits = [150, 250, 400, 650, 1000, 1600, 2500, 4000, 5500];
+      let lastNetworkError = null;
       for (const wait of waits) {
         await new Promise(r => setTimeout(r, wait));
-        const s = await jsonp({ action: 'status', requestId: requestId }, 9000, 2);
-        if (s.status === 'success') {
-          if (s.perf) console.log('booking performance', s.perf);
-          return s;
+        try {
+          const s = await jsonp({ action: 'status', requestId: requestId }, 6000, 1);
+          if (s.status === 'success') {
+            if (s.perf) console.log('booking performance', s.perf);
+            return s;
+          }
+          if (s.status === 'error') throw new Error(s.message || '預約失敗');
+        } catch (e) {
+          // 單次狀態查詢失敗不代表預約失敗；保留錯誤並繼續下一次短輪詢。
+          if (e && /預約|時段|服務|日期|LINE/.test(String(e.message || ''))) throw e;
+          lastNetworkError = e;
         }
-        if (s.status === 'error') throw new Error(s.message || '預約失敗');
       }
+      console.warn('booking status polling ended', lastNetworkError);
       throw new Error('預約處理較久，請先不要重複送出；稍後重新開啟頁面即可確認。');
     }
 
@@ -1920,11 +1928,9 @@
       if (!p || !p.date || !p.time) return false;
 
       try {
-        // 送出前只做一次「最新單日狀態」確認，避免 localStorage/月快取過期。
-        const fresh = await loadDayOccupancy(true);
-
-        // 如果 API 暫時讀不到，最後仍交由後端建立預約時做權威衝突檢查。
-        if (!fresh || !currentDayOccupancy || currentDayOccupancy.date !== p.date) {
+        // 先用畫面目前已載入的占用資料做即時檢查；送出後仍由後端在 Lock 內
+        // 讀取最新工作表作最終判斷，不再為同一時段多打一支阻塞請求。
+        if (!currentDayOccupancy || currentDayOccupancy.date !== p.date) {
           return true;
         }
 
@@ -2066,7 +2072,7 @@
     // ===== 初始化 =====
     initForm();
 
-    // 先用本機最後一次服務設定立即畫出首頁，再背景同步最新狀態。
+    // 僅使用本分頁短效快取，避免跨日殘留的舊開關讓已開放服務先顯示為關閉。
     if (!restoreServiceSettingsCache()) {
       applyServiceSettings();
     }

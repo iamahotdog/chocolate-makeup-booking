@@ -292,6 +292,7 @@
     let filter = 'pending';
     let adminLoadSeq = 0;
     let pendingAction = null;
+    let serviceSettingsAdminItems = [];
 
     // 柔和切換兩個畫面：先讓 hideEl 淡出＋微移，結束後才真的切換 display，
     // showEl 再從一個輕微位移的透明狀態淡入到定位。dir 只影響進出的方向。
@@ -830,6 +831,7 @@
 
     function renderServiceSettingsAdmin(items) {
       const box = $('serviceSettingsList');
+      serviceSettingsAdminItems = (items || []).map(x => ({ ...x }));
       box.innerHTML = items.map(x => {
         const lesson = x.id === 'lesson';
         const sub = lesson ? '🥨 11:00–15:00，一次 4 小時（不接受加時）' : '';
@@ -880,7 +882,14 @@
     }
 
     async function toggleServiceSetting(serviceId, enabled) {
+      const previousItems = serviceSettingsAdminItems.map(x => ({ ...x }));
       try {
+        // 先在畫面上立即反映，再由後端確認，避免使用者等待網路往返。
+        const optimisticItems = serviceSettingsAdminItems.map(x => x.id === serviceId ? { ...x, enabled: enabled } : x);
+        renderServiceSettingsAdmin(optimisticItems);
+        try {
+          sessionStorage.setItem('choco_service_settings', JSON.stringify({ ts: Date.now(), items: optimisticItems }));
+        } catch (_) {}
         toast(enabled ? '開啟中…' : '關閉中…');
         await fetch(API_URL, {
           method: 'POST',
@@ -888,9 +897,13 @@
           headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
           body: new URLSearchParams({ action: 'admin_service_update', adminKey: adminKey, serviceId: serviceId, enabled: String(enabled), ts: Date.now() })
         });
-        setTimeout(loadServiceSettingsAdmin, 500);
+        await loadServiceSettingsAdmin(true);
         toast(enabled ? '已開啟' : '已關閉');
       } catch (e) {
+        renderServiceSettingsAdmin(previousItems);
+        try {
+          sessionStorage.setItem('choco_service_settings', JSON.stringify({ ts: Date.now(), items: previousItems }));
+        } catch (_) {}
         toast(e.message);
       }
     }
