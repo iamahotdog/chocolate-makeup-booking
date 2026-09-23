@@ -396,30 +396,23 @@
       const dashboard = $('dashboard');
       fadeSwitch(login, dashboard, 'fwd');
 
+      // 先顯示跨瀏覽器工作階段保留的本機快取，不等待 Apps Script。
       const hasCache = renderFilter(filter);
-      if (!hasCache) $('list').innerHTML = '<div class="loading">正在讀取預約…</div>';
+      if (!hasCache) $('list').innerHTML = '<div class="loading">正在同步最新預約…</div>';
 
       try {
-        if (!hasCache) {
-          const first = await jsonp(
-            { action: 'admin_list', adminKey: adminKey, filter: 'pending', ts: Date.now() },
-            1,
-            25000
-          );
-          if (!first.ok) throw new Error(apiErrorMessage(first));
-          const items = first.data && Array.isArray(first.data.items) ? first.data.items : [];
-          adminLocalCacheSet('pending', items);
-          render(items);
-        }
+        // 只驗證管理密碼，不讀 Google Sheet。
+        const auth = await jsonp(
+          { action: 'admin_ping', adminKey: adminKey, ts: Date.now() },
+          1,
+          12000
+        );
+        if (!auth.ok) throw new Error(apiErrorMessage(auth));
 
         sessionStorage.setItem('choco_admin_key', adminKey);
 
-        setTimeout(() => {
-          loadDashboard(true).catch(() => {});
-        }, 300);
-
-        setTimeout(() => warmAdminPages(), 4500);
-
+        // 驗證通過後只同步目前分頁；不再同時預載其他頁面。
+        loadFilterFast(filter, true).catch(() => {});
       } catch (e) {
         const msg = e.message;
         const authError = /unauthorized|forbidden/i.test(msg);
@@ -427,17 +420,20 @@
           fadeSwitch(dashboard, login, 'back');
           sessionStorage.removeItem('choco_admin_key');
           adminKey = '';
+        } else if (hasCache) {
+          toast('目前同步較慢，先顯示上次資料');
+        } else {
+          toast(msg);
         }
-        toast(authError ? '密碼錯誤' : msg);
       }
     }
 
     function adminLocalCacheGet(filter) {
       try {
-        const raw = sessionStorage.getItem('choco_list_' + filter);
+        const raw = localStorage.getItem('choco_list_' + filter);
         if (!raw) return null;
         const obj = JSON.parse(raw);
-        if (Date.now() - obj.ts > 10 * 60 * 1000) return null;
+        if (Date.now() - obj.ts > 30 * 24 * 60 * 60 * 1000) return null;
         return obj.items;
       } catch {
         return null;
@@ -446,13 +442,13 @@
 
     function adminLocalCacheSet(filter, items) {
       try {
-        sessionStorage.setItem('choco_list_' + filter, JSON.stringify({ ts: Date.now(), items: items }));
+        localStorage.setItem('choco_list_' + filter, JSON.stringify({ ts: Date.now(), items: items }));
       } catch {}
     }
 
     function adminLocalCacheAge(filter) {
       try {
-        const raw = sessionStorage.getItem('choco_list_' + filter);
+        const raw = localStorage.getItem('choco_list_' + filter);
         if (!raw) return Infinity;
         const obj = JSON.parse(raw);
         return Date.now() - Number(obj.ts || 0);
@@ -471,34 +467,53 @@
     }
 
     function warmAdminPages() {
-      if (!adminKey) return;
-      clearTimeout(warmAdminPages.timer);
-      warmAdminPages.timer = setTimeout(async () => {
-        try { await loadVacationMonth(false); } catch (_) {}
-        setTimeout(() => {
-          loadServiceSettingsAdmin(false).catch(() => {});
-        }, 1200);
-      }, 800);
+      // 極速模式：不預先呼叫休假/服務設定 API。
+      // 只在使用者真的切換到該頁時才讀取，避免 Apps Script 冷啟動時多支請求互相拖慢。
+    }
+
+    async function loadFilterFast(f, force = false) {
+      const seq = ++adminLoadSeq;
+      const hasCache = renderFilter(f);
+
+      // 60 秒內已同步過就直接用本機資料。
+      if (!force && hasCache && adminLocalCacheAge(f) < 60000) return;
+
+      try {
+        const r = await jsonp(
+          { action: 'admin_list', adminKey: adminKey, filter: f, ts: Date.now() },
+          1,
+          12000
+        );
+        if (seq !== adminLoadSeq) return;
+        if (!r.ok) throw new Error(apiErrorMessage(r));
+
+        const items = r.data && Array.isArray(r.data.items) ? r.data.items : [];
+        adminLocalCacheSet(f, items);
+
+        if (filter === f && managerPage === 'bookings') render(items);
+      } catch (e) {
+        if (seq !== adminLoadSeq) return;
+        if (!hasCache) {
+          $('list').innerHTML = '<div class="empty">同步較慢，請再試一次。<br><button class="btn restore" style="margin-top:12px;" onclick="loadFilterFast(\'' + escapeJs(f) + '\', true)">重新載入</button></div>';
+        } else {
+          toast('同步較慢，先顯示上次資料');
+        }
+      }
     }
 
     // 後台四個分頁（待訂金／已確認／今日／已釋放）原本每切一次分頁就要打一次
     // admin_list API；現在後端 admin_dashboard 會一次把四個分類都算好回傳，
     // 前端存進 sessionStorage 快取後，切分頁只是讀本地資料、幾乎不用等待。
     async function loadDashboard(force = false) {
-      const seq = ++adminLoadSeq;
-      const list = $('list');
-      const hasCache = renderFilter(filter);
-
-      if (!force && hasCache && adminLocalCacheAge(filter) < 180000) return;
-      if (!hasCache) list.innerHTML = '<div class="loading">正在讀取預約…</div>';
+      // 保留相容性：需要完整同步時才使用。
+      if (!force) return loadFilterFast(filter, false);
 
       try {
         const r = await jsonp(
           { action: 'admin_dashboard', adminKey: adminKey, ts: Date.now() },
           1,
-          25000
+          12000
         );
-        if (seq !== adminLoadSeq) return;
         if (!r.ok) throw new Error(apiErrorMessage(r));
 
         const data = r.data || {};
@@ -507,13 +522,7 @@
         });
         render(data[filter] || []);
       } catch (e) {
-        if (seq !== adminLoadSeq) return;
-        if (!hasCache) {
-          list.innerHTML = '<div class="empty">' + escapeHtml(e.message) +
-            '<br><button class="btn restore" style="margin-top:12px;" onclick="loadDashboard(true)">重新載入</button></div>';
-        } else {
-          toast('背景同步較慢，先顯示目前資料');
-        }
+        if (!renderFilter(filter)) toast(e.message);
       }
     }
 
@@ -521,11 +530,12 @@
       filter = f;
       document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
       el.classList.add('active');
-      // 四個分類已經在 loadDashboard() 一次抓回來了，切分頁優先讀快取，
-      // 只有快取還沒建立（例如剛登入資料還沒回來）才會真的打一次 API。
-      if (!renderFilter(f)) {
-        loadDashboard();
-      }
+
+      const hasCache = renderFilter(f);
+      if (!hasCache) $('list').innerHTML = '<div class="loading">正在同步…</div>';
+
+      // 每次只同步使用者真正要看的分類，不抓整個 dashboard。
+      loadFilterFast(f, false);
     }
 
     function render(items) {
@@ -562,7 +572,7 @@
               <div class="service">${escapeHtml(x.service)}</div>
               <span class="status ${cls}">${escapeHtml(x.status)}</span>
             </div>
-            <div class="name">${escapeHtml(x.name)}${x.lineName || x.lineDisplayName || x.displayName ? '｜LINE：' + escapeHtml(x.lineName || x.lineDisplayName || x.displayName) : ''}</div>
+            <div class="name">${x.lineName || x.lineDisplayName || x.displayName ? 'LINE：' + escapeHtml(x.lineName || x.lineDisplayName || x.displayName) : ''}</div>
           </div>
         </div>
         <div class="details">
@@ -599,7 +609,7 @@
         if (!r.ok) throw new Error(apiErrorMessage(r));
         const msg = [r.data && r.data.message, r.data && r.data.lineNotice].filter(Boolean).join('\n');
         toast(msg || '操作成功');
-        await loadDashboard();
+        await loadFilterFast(filter, true);
       } catch (e) {
         toast(e.message);
       }
@@ -626,7 +636,7 @@
 
       if (!raw) {
         try {
-          const saved = JSON.parse(sessionStorage.getItem('choco_vacation_' + month) || 'null');
+          const saved = JSON.parse(localStorage.getItem('choco_vacation_' + month) || 'null');
           if (saved && Date.now() - Number(saved.ts || 0) < 5 * 60 * 1000) {
             raw = saved;
             vacationMonthCache[month] = saved;
@@ -652,7 +662,7 @@
       };
       vacationMonthCache[month] = data;
       try {
-        sessionStorage.setItem('choco_vacation_' + month, JSON.stringify(data));
+        localStorage.setItem('choco_vacation_' + month, JSON.stringify(data));
       } catch (_) {}
       return data;
     }
@@ -729,10 +739,8 @@
 
       if (page === 'bookings') {
         const hasCache = renderFilter(filter);
-        // 有快取就立即顯示；超過 3 分鐘才背景同步。
-        if (!hasCache || adminLocalCacheAge(filter) > 180000) {
-          setTimeout(() => loadDashboard(false), 0);
-        }
+        if (!hasCache) $('list').innerHTML = '<div class="loading">正在同步…</div>';
+        setTimeout(() => loadFilterFast(filter, false), 0);
       }
       if (page === 'vacation') loadVacationMonth(false);
       if (page === 'services') loadServiceSettingsAdmin(false);
@@ -876,7 +884,7 @@
       const box = $('serviceSettingsList');
       let cached = null;
       try {
-        cached = JSON.parse(sessionStorage.getItem('choco_service_settings'));
+        cached = JSON.parse(localStorage.getItem('choco_service_settings'));
       } catch (_) {}
 
       const cacheFresh = cached && Array.isArray(cached.items) && cached.items.length
@@ -897,7 +905,7 @@
         if (!items || !items.length) throw new Error('未取得服務設定');
         renderServiceSettingsAdmin(items);
         try {
-          sessionStorage.setItem('choco_service_settings', JSON.stringify({ ts: Date.now(), items: items }));
+          localStorage.setItem('choco_service_settings', JSON.stringify({ ts: Date.now(), items: items }));
         } catch (_) {}
       } catch (e) {
         if (!cached || !cached.items || !cached.items.length) {
@@ -935,8 +943,12 @@
     if (adminKey) {
       $('login').style.display = 'none';
       $('dashboard').style.display = 'block';
-      loadDashboard();
-      warmAdminPages();
+
+      const hasCache = renderFilter(filter);
+      if (!hasCache) $('list').innerHTML = '<div class="loading">正在同步最新預約…</div>';
+
+      // 只同步目前畫面，不預載休假與服務設定。
+      loadFilterFast(filter, false);
     }
   </script>
 </body>
