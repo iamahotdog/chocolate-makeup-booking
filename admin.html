@@ -63,9 +63,10 @@
     .time { flex: 0 0 76px; font-size: 22px; font-weight: 850; line-height: 1.15; }
     .date { display: block; margin-top: 3px; color: var(--muted); font-size: 10px; font-weight: 600; }
     .main { min-width: 0; flex: 1; }
+    .serviceRow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
     .service { font-size: 16px; font-weight: 850; }
     .name { margin-top: 4px; font-size: 13px; }
-    .status { display: inline-block; margin-top: 7px; padding: 5px 8px; border-radius: 999px; background: #f6eee9; color: #745547; font-size: 10px; font-weight: 800; }
+    .status { display: inline-block; margin-top: 0; padding: 5px 8px; border-radius: 999px; background: #f6eee9; color: #745547; font-size: 10px; font-weight: 800; }
     .status.confirmed { background: var(--green); color: var(--greenInk); }
     .status.released { background: #f1efee; color: #81736d; }
     .details { margin-top: 13px; padding: 12px 13px; border-radius: 14px; background: #fff9f6; color: #775b4f; font-size: 12px; line-height: 1.7; }
@@ -555,17 +556,19 @@
 
       return `<article class="booking">
         <div class="top">
-          <div class="time">${escapeHtml(x.time)}<span class="date">${escapeHtml(x.date).replaceAll('-', ' ')}</span></div>
+          <div class="time">${escapeHtml(x.time)}<span class="date">${escapeHtml(x.date).replaceAll('-', '/')}</span></div>
           <div class="main">
-            <div class="service">${escapeHtml(x.service)}</div>
-            <div class="name">${escapeHtml(x.name)}${x.lineName || x.lineDisplayName || x.displayName ? '｜LINE ' + escapeHtml(x.lineName || x.lineDisplayName || x.displayName) : ''}</div>
-            <span class="status ${cls}">${escapeHtml(x.status)}</span>
+            <div class="serviceRow">
+              <div class="service">${escapeHtml(x.service)}</div>
+              <span class="status ${cls}">${escapeHtml(x.status)}</span>
+            </div>
+            <div class="name">${escapeHtml(x.name)}${x.lineName || x.lineDisplayName || x.displayName ? '｜LINE：' + escapeHtml(x.lineName || x.lineDisplayName || x.displayName) : ''}</div>
           </div>
         </div>
         <div class="details">
           <b>預計結束：</b>${escapeHtml(x.serviceEnd)}<br>
           <b>地點：</b>${escapeHtml(place)}<br>
-          ${x.note ? ('<b>備註：</b>' + escapeHtml(x.note)) : ''}
+          ${x.note ? ('<b>細項：</b>' + escapeHtml(x.note)) : ''}
         </div>
         ${actionHtml}
       </article>`;
