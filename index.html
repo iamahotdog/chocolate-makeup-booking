@@ -711,17 +711,19 @@
         notice('', '');
 
         if (serviceId === 'lesson') {
-          // 教學固定 11:00，不顯示一般時段按鈕。
+          // 教學固定 11:00；選完日期就強制抓一次最新單日狀態。
           $('selectedStartTime').value = '11:00';
-          await ensureDateOccupancyReady();
+          await loadDayOccupancy(true);
           scheduleCheck();
           return;
         }
 
-        // 月曆已有完整月資料時可以立即顯示時段；沒有才進入骨架 loading。
+        // 有月快取時先立即顯示，避免使用者等待；
+        // 但仍在背景強制同步該日最新預約，避免 stale cache 讓舊時段可點。
         const hydrated = hydrateDayOccupancyFromMonthCache($('date').value);
         if (hydrated) {
           renderAvailableTimeButtons();
+          loadDayOccupancy(true).catch(() => {});
           return;
         }
 
@@ -1015,10 +1017,40 @@
       return true;
     }
 
+    function syncFreshDayIntoMonthCache(dateKey, occ) {
+      try {
+        const month = String(dateKey || '').slice(0, 7);
+        if (!month || !occ || occ.date !== dateKey) return;
+
+        let cached = publicMonthOccupancyCache[month]?.data || restoreMonthCache(month);
+        if (!cached || cached.partial) return;
+
+        const closedDates = new Set(cached.closedDates || []);
+        if (occ.closedDay) closedDates.add(dateKey);
+        else closedDates.delete(dateKey);
+
+        const intervalsByDate = { ...(cached.intervalsByDate || {}) };
+        intervalsByDate[dateKey] = Array.isArray(occ.intervals) ? occ.intervals : [];
+
+        const data = {
+          closedDates,
+          intervalsByDate,
+          version: cached.version || 0,
+          partial: false
+        };
+
+        publicMonthOccupancyCache[month] = { ts: Date.now(), data };
+        saveMonthCache(month, data);
+      } catch (e) {
+        console.warn('sync fresh day cache failed', e);
+      }
+    }
+
     function selectBookingDate(dateKey) {
       $('date').value = dateKey;
       $('dateDisplay').textContent = dateKey.replace(/-/g, '/');
       currentDayOccupancy = null;
+      lastFreshOccupancyAt = 0;
       clearSelectedTime();
 
       // 月曆資料若已經完整，就直接拿來產生時間，不再多打一支 API。
@@ -1091,8 +1123,8 @@
     }
 
     let serviceSettings = { registration: true, wedding: true, makeover: true, lesson: true };
-    const SERVICE_CACHE_KEY = 'choco_public_service_settings_v3';
-    const SERVICE_CACHE_TTL = 30 * 1000;
+    const SERVICE_CACHE_KEY = 'choco_public_service_settings_v2';
+    const SERVICE_CACHE_TTL = 5 * 60 * 1000;
     let serviceSettingsReady = false;
     let serviceSettingsLoading = null;
     let lastServiceSettingsSync = 0;
@@ -1116,7 +1148,7 @@
 
     function restoreServiceSettingsCache() {
       try {
-        const cached = JSON.parse(sessionStorage.getItem(SERVICE_CACHE_KEY));
+        const cached = JSON.parse(localStorage.getItem(SERVICE_CACHE_KEY));
         if (cached && cached.items && Date.now() - cached.ts < SERVICE_CACHE_TTL) {
           cached.items.forEach(x => { serviceSettings[x.id] = !!x.enabled; });
           serviceSettingsReady = true;
@@ -1129,7 +1161,7 @@
 
     function saveServiceSettingsCache(items) {
       try {
-        sessionStorage.setItem(SERVICE_CACHE_KEY, JSON.stringify({ ts: Date.now(), items: items }));
+        localStorage.setItem(SERVICE_CACHE_KEY, JSON.stringify({ ts: Date.now(), items: items }));
       } catch {}
     }
 
@@ -1368,6 +1400,7 @@
     let dayOccupancyCache = {};
     let currentDayOccupancy = null;
     let occupancySeq = 0;
+    let lastFreshOccupancyAt = 0;
 
     function dayOccupancyKey() {
       return serviceId + '_' + $('date').value;
@@ -1388,7 +1421,7 @@
       const seq = ++occupancySeq;
       try {
         const r = await jsonp(
-          { action: 'day_occupancy', date: date, ts: Date.now() },
+          { action: 'day_occupancy', date: date, fresh: force ? '1' : '0', ts: Date.now() },
           9000,
           2
         );
@@ -1401,6 +1434,8 @@
 
         currentDayOccupancy = occ;
         dayOccupancyCache[key] = { ts: Date.now(), data: occ };
+        if (force) lastFreshOccupancyAt = Date.now();
+        syncFreshDayIntoMonthCache(date, occ);
 
         if (serviceId !== 'lesson') renderAvailableTimeButtons();
         if (selectedTime()) scheduleCheck();
@@ -1548,9 +1583,28 @@
       notice('', '');
     }
 
-    function selectStartTime(time, button, runCheck = true) {
+    async function selectStartTime(time, button, runCheck = true) {
+      const date = $('date').value;
+      if (!date) return;
+
+      // 若目前畫面是由月快取產生，或最新單日同步已超過 15 秒，
+      // 先快速更新一次該日狀態，避免使用者選到舊時段。
+      if (Date.now() - lastFreshOccupancyAt > 15000) {
+        const fresh = await loadDayOccupancy(true);
+        if (!fresh || !isSelectableStartTime(time, date)) {
+          clearSelectedTime();
+          renderAvailableTimeButtons();
+          notice('bad', '這個時段目前已預約額滿，請換個時間看看 ♡');
+          return;
+        }
+      }
+
       document.querySelectorAll('.timeSlot.selected').forEach(x => x.classList.remove('selected'));
-      if (button) button.classList.add('selected');
+      if (button) {
+        // fresh 後 DOM 可能被重畫，重新抓一次對應按鈕。
+        const latestButton = document.querySelector('.timeSlot[data-time="' + time + '"]');
+        (latestButton || button).classList.add('selected');
+      }
 
       $('selectedStartTime').value = time;
 
@@ -1750,24 +1804,16 @@
     }
 
     async function pollStatus(requestId) {
-      const waits = [150, 250, 400, 650, 1000, 1600, 2500, 4000, 5500];
-      let lastNetworkError = null;
+      const waits = [350, 700, 1200, 1800, 2600, 3800];
       for (const wait of waits) {
         await new Promise(r => setTimeout(r, wait));
-        try {
-          const s = await jsonp({ action: 'status', requestId: requestId }, 6000, 1);
-          if (s.status === 'success') {
-            if (s.perf) console.log('booking performance', s.perf);
-            return s;
-          }
-          if (s.status === 'error') throw new Error(s.message || '預約失敗');
-        } catch (e) {
-          // 單次狀態查詢失敗不代表預約失敗；保留錯誤並繼續下一次短輪詢。
-          if (e && /預約|時段|服務|日期|LINE/.test(String(e.message || ''))) throw e;
-          lastNetworkError = e;
+        const s = await jsonp({ action: 'status', requestId: requestId }, 9000, 2);
+        if (s.status === 'success') {
+          if (s.perf) console.log('booking performance', s.perf);
+          return s;
         }
+        if (s.status === 'error') throw new Error(s.message || '預約失敗');
       }
-      console.warn('booking status polling ended', lastNetworkError);
       throw new Error('預約處理較久，請先不要重複送出；稍後重新開啟頁面即可確認。');
     }
 
@@ -1928,9 +1974,11 @@
       if (!p || !p.date || !p.time) return false;
 
       try {
-        // 先用畫面目前已載入的占用資料做即時檢查；送出後仍由後端在 Lock 內
-        // 讀取最新工作表作最終判斷，不再為同一時段多打一支阻塞請求。
-        if (!currentDayOccupancy || currentDayOccupancy.date !== p.date) {
+        // 送出前只做一次「最新單日狀態」確認，避免 localStorage/月快取過期。
+        const fresh = await loadDayOccupancy(true);
+
+        // 如果 API 暫時讀不到，最後仍交由後端建立預約時做權威衝突檢查。
+        if (!fresh || !currentDayOccupancy || currentDayOccupancy.date !== p.date) {
           return true;
         }
 
@@ -2009,7 +2057,7 @@
           renderAvailableTimeButtons();
         }
 
-        notice('bad', '這個時段剛剛已無法預約，已幫您更新最新可選時間 ♡');
+        notice('bad', '這個時段目前已預約額滿，請換個時間看看 ♡');
         b.disabled = false;
         b.textContent = '先預定這個時間 ✦';
         return;
@@ -2072,7 +2120,7 @@
     // ===== 初始化 =====
     initForm();
 
-    // 僅使用本分頁短效快取，避免跨日殘留的舊開關讓已開放服務先顯示為關閉。
+    // 先用本機最後一次服務設定立即畫出首頁，再背景同步最新狀態。
     if (!restoreServiceSettingsCache()) {
       applyServiceSettings();
     }
