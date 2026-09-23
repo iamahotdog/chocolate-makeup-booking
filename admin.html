@@ -292,7 +292,6 @@
     let filter = 'pending';
     let adminLoadSeq = 0;
     let pendingAction = null;
-    let serviceSettingsAdminItems = [];
 
     // 柔和切換兩個畫面：先讓 hideEl 淡出＋微移，結束後才真的切換 display，
     // showEl 再從一個輕微位移的透明狀態淡入到定位。dir 只影響進出的方向。
@@ -392,20 +391,32 @@
 
       const login = $('login');
       const dashboard = $('dashboard');
-
       fadeSwitch(login, dashboard, 'fwd');
 
       const hasCache = renderFilter(filter);
-      if (!hasCache) $('list').innerHTML = '<div class="loading">載入中…</div>';
+      if (!hasCache) $('list').innerHTML = '<div class="loading">正在讀取預約…</div>';
 
       try {
-        const r = await jsonp({ action: 'admin_dashboard', adminKey: adminKey, ts: Date.now() });
-        if (!r.ok) throw new Error(apiErrorMessage(r));
-        const data = r.data || {};
-        ['pending', 'confirmed', 'today', 'released'].forEach(k => adminLocalCacheSet(k, data[k] || []));
+        if (!hasCache) {
+          const first = await jsonp(
+            { action: 'admin_list', adminKey: adminKey, filter: 'pending', ts: Date.now() },
+            1,
+            25000
+          );
+          if (!first.ok) throw new Error(apiErrorMessage(first));
+          const items = first.data && Array.isArray(first.data.items) ? first.data.items : [];
+          adminLocalCacheSet('pending', items);
+          render(items);
+        }
+
         sessionStorage.setItem('choco_admin_key', adminKey);
-        render(data[filter] || []);
-        warmAdminPages();
+
+        setTimeout(() => {
+          loadDashboard(true).catch(() => {});
+        }, 300);
+
+        setTimeout(() => warmAdminPages(), 4500);
+
       } catch (e) {
         const msg = e.message;
         const authError = /unauthorized|forbidden/i.test(msg);
@@ -423,7 +434,7 @@
         const raw = sessionStorage.getItem('choco_list_' + filter);
         if (!raw) return null;
         const obj = JSON.parse(raw);
-        if (Date.now() - obj.ts > 180000) return null;
+        if (Date.now() - obj.ts > 10 * 60 * 1000) return null;
         return obj.items;
       } catch {
         return null;
@@ -461,32 +472,44 @@
       clearTimeout(warmAdminPages.timer);
       warmAdminPages.timer = setTimeout(async () => {
         try { await loadVacationMonth(false); } catch (_) {}
-        setTimeout(() => { loadServiceSettingsAdmin(false).catch(() => {}); }, 250);
-      }, 650);
+        setTimeout(() => {
+          loadServiceSettingsAdmin(false).catch(() => {});
+        }, 1200);
+      }, 800);
     }
 
     // 後台四個分頁（待訂金／已確認／今日／已釋放）原本每切一次分頁就要打一次
     // admin_list API；現在後端 admin_dashboard 會一次把四個分類都算好回傳，
     // 前端存進 sessionStorage 快取後，切分頁只是讀本地資料、幾乎不用等待。
-    async function loadDashboard() {
+    async function loadDashboard(force = false) {
       const seq = ++adminLoadSeq;
       const list = $('list');
       const hasCache = renderFilter(filter);
-      if (!hasCache) list.innerHTML = '<div class="loading">載入中…</div>';
+
+      if (!force && hasCache && adminLocalCacheAge(filter) < 180000) return;
+      if (!hasCache) list.innerHTML = '<div class="loading">正在讀取預約…</div>';
 
       try {
-        const r = await jsonp({ action: 'admin_dashboard', adminKey: adminKey, ts: Date.now() });
+        const r = await jsonp(
+          { action: 'admin_dashboard', adminKey: adminKey, ts: Date.now() },
+          1,
+          25000
+        );
         if (seq !== adminLoadSeq) return;
         if (!r.ok) throw new Error(apiErrorMessage(r));
+
         const data = r.data || {};
-        ['pending', 'confirmed', 'today', 'released'].forEach(k => adminLocalCacheSet(k, data[k] || []));
+        ['pending', 'confirmed', 'today', 'released'].forEach(k => {
+          adminLocalCacheSet(k, data[k] || []);
+        });
         render(data[filter] || []);
       } catch (e) {
         if (seq !== adminLoadSeq) return;
         if (!hasCache) {
-          list.innerHTML = '<div class="empty">' + escapeHtml(e.message) + '<br><button class="btn restore" style="margin-top: 12px;" onclick="loadDashboard()">重新載入</button></div>';
+          list.innerHTML = '<div class="empty">' + escapeHtml(e.message) +
+            '<br><button class="btn restore" style="margin-top:12px;" onclick="loadDashboard(true)">重新載入</button></div>';
         } else {
-          toast(e.message);
+          toast('背景同步較慢，先顯示目前資料');
         }
       }
     }
@@ -701,9 +724,9 @@
 
       if (page === 'bookings') {
         const hasCache = renderFilter(filter);
-        // 有快取就立即顯示；超過 30 秒才在背景同步最新資料。
-        if (!hasCache || adminLocalCacheAge(filter) > 30000) {
-          setTimeout(() => loadDashboard(), 0);
+        // 有快取就立即顯示；超過 3 分鐘才背景同步。
+        if (!hasCache || adminLocalCacheAge(filter) > 180000) {
+          setTimeout(() => loadDashboard(false), 0);
         }
       }
       if (page === 'vacation') loadVacationMonth(false);
@@ -740,7 +763,7 @@
       if (!force && cached.ts && Date.now() - cached.ts < 60000) return;
 
       try {
-        const r = await jsonp({ action: 'admin_vacation_snapshot', adminKey: adminKey, month: month, ts: Date.now() });
+        const r = await jsonp({ action: 'admin_vacation_snapshot', adminKey: adminKey, month: month, ts: Date.now() }, 1, 20000);
         if (seq !== vacationLoadSeq || month !== monthKey()) return;
         if (!r.ok) throw new Error(apiErrorMessage(r));
 
@@ -831,7 +854,6 @@
 
     function renderServiceSettingsAdmin(items) {
       const box = $('serviceSettingsList');
-      serviceSettingsAdminItems = (items || []).map(x => ({ ...x }));
       box.innerHTML = items.map(x => {
         const lesson = x.id === 'lesson';
         const sub = lesson ? '🥨 11:00–15:00，一次 4 小時（不接受加時）' : '';
@@ -864,7 +886,7 @@
       if (!force && cacheFresh) return;
 
       try {
-        const r = await jsonp({ action: 'admin_service_settings', adminKey: adminKey });
+        const r = await jsonp({ action: 'admin_service_settings', adminKey: adminKey }, 1, 15000);
         if (!r.ok) throw new Error(apiErrorMessage(r));
         const items = r.data && r.data.items;
         if (!items || !items.length) throw new Error('未取得服務設定');
@@ -882,14 +904,7 @@
     }
 
     async function toggleServiceSetting(serviceId, enabled) {
-      const previousItems = serviceSettingsAdminItems.map(x => ({ ...x }));
       try {
-        // 先在畫面上立即反映，再由後端確認，避免使用者等待網路往返。
-        const optimisticItems = serviceSettingsAdminItems.map(x => x.id === serviceId ? { ...x, enabled: enabled } : x);
-        renderServiceSettingsAdmin(optimisticItems);
-        try {
-          sessionStorage.setItem('choco_service_settings', JSON.stringify({ ts: Date.now(), items: optimisticItems }));
-        } catch (_) {}
         toast(enabled ? '開啟中…' : '關閉中…');
         await fetch(API_URL, {
           method: 'POST',
@@ -897,13 +912,9 @@
           headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
           body: new URLSearchParams({ action: 'admin_service_update', adminKey: adminKey, serviceId: serviceId, enabled: String(enabled), ts: Date.now() })
         });
-        await loadServiceSettingsAdmin(true);
+        setTimeout(loadServiceSettingsAdmin, 500);
         toast(enabled ? '已開啟' : '已關閉');
       } catch (e) {
-        renderServiceSettingsAdmin(previousItems);
-        try {
-          sessionStorage.setItem('choco_service_settings', JSON.stringify({ ts: Date.now(), items: previousItems }));
-        } catch (_) {}
         toast(e.message);
       }
     }
