@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Chocolate booking release: 20260930-v3 -->
+<!-- Chocolate booking release: 20260930-v4-calendar-fast -->
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
@@ -734,6 +734,7 @@
     let publicMonthOccupancyCache = {};
     let bookingCalendarRenderSeq = 0;
     let monthOccupancySeq = {};
+    const monthOccupancyInFlight = {};
     const MONTH_OCCUPANCY_TTL = 60000;
     const MONTH_LOCAL_CACHE_TTL = 5 * 60 * 1000;
 
@@ -798,7 +799,20 @@
       } catch (_) {}
     }
 
-    async function getPublicMonthOccupancy(month, force = false) {
+    function getPublicMonthOccupancy(month, force = false) {
+      const pending = monthOccupancyInFlight[month];
+      // 同一月份的預載和月曆開啟共用最新請求；失效後不沿用舊請求。
+      if (pending && pending.seq === monthOccupancySeq[month]) return pending.promise;
+      const promise = fetchPublicMonthOccupancy(month, force);
+      const entry = { seq: monthOccupancySeq[month], promise: null };
+      entry.promise = promise.finally(() => {
+        if (monthOccupancyInFlight[month] === entry) delete monthOccupancyInFlight[month];
+      });
+      monthOccupancyInFlight[month] = entry;
+      return entry.promise;
+    }
+
+    async function fetchPublicMonthOccupancy(month, force = false) {
       let cached = publicMonthOccupancyCache[month];
       if (!cached) {
         const restored = restoreMonthCache(month);
@@ -812,7 +826,7 @@
       const seq = monthOccupancySeq[month] = (monthOccupancySeq[month] || 0) + 1;
       try {
         const r = await jsonp(
-          { action: 'public_month_occupancy', month: month, fresh: force ? '1' : '0', ts: Date.now() },
+          { action: 'public_month_occupancy', month: month, fresh: '1', ts: Date.now() },
           10000,
           2
         );
@@ -949,12 +963,17 @@
       }
     }
 
-    function preloadBookingCalendarData() {
+    function preloadBookingCalendarData(force = false) {
       const base = $('date').value
         ? new Date($('date').value + 'T12:00:00')
         : new Date();
       const month = monthKeyFromDate(base);
-      getPublicMonthOccupancy(month, false).catch(() => {});
+      const nextMonth = monthKeyFromDate(new Date(base.getFullYear(), base.getMonth() + 1, 1));
+      // 先準備本月，再準備下月；不一次送出兩筆額外請求。
+      return getPublicMonthOccupancy(month, force).then(data => {
+        if (!data.partial) getPublicMonthOccupancy(nextMonth, false).catch(() => {});
+        return data;
+      }).catch(() => null);
     }
 
     async function openBookingCalendar() {
@@ -2178,6 +2197,9 @@
     loadServiceSettings(true);
 
     initLiff();
+
+    // 首頁就開始準備日期狀態，不必等到點開服務才讀取。
+    setTimeout(() => preloadBookingCalendarData(true), 100);
 
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') {
