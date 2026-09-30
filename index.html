@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Chocolate booking release: 20260930-v4-calendar-fast -->
+<!-- Chocolate booking release: 20261001-v5-blocked-times -->
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
@@ -134,7 +134,14 @@
       text-align: center;
       transition: transform .08s ease, background .12s ease, border-color .12s ease, color .12s ease;
     }
-    .timeSlot:active { transform: scale(.97); }
+    .timeSlot:not(:disabled):active { transform: scale(.97); }
+    .timeSlot:disabled {
+      background: #eeeeec;
+      border-color: #d8d8d4;
+      color: #85857f;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
     .timeSlot.selected {
       border-color: var(--brown);
       background: linear-gradient(#7b5039, #613928);
@@ -376,7 +383,7 @@
             </div>
 
             <input id="selectedStartTime" type="hidden">
-            <div class="fieldHint">以下僅顯示目前可預約時段。<span id="makeoverWeekdayHint" class="hidden">平日 10:00 後至 14:00 前暫不開放預約。</span></div>
+            <div class="fieldHint">灰色時段目前不可預約，請選擇其他時間。<span id="makeoverWeekdayHint" class="hidden">平日 10:00 後至 14:00 前暫不開放預約。</span></div>
           </div>
 
           <div id="peopleFields" class="field">
@@ -1559,8 +1566,24 @@
       return slots;
     }
 
+    function buildDisplayedStartTimes() {
+      const date = $('date').value;
+      const duration = estimateServiceMinutesLocal();
+      if (!date || !duration) return [];
+      const slots = [];
+      for (let mins = 0; mins + duration + 30 <= 1440; mins += 30) {
+        const time = String(Math.floor(mins / 60)).padStart(2, '0') + ':' + String(mins % 60).padStart(2, '0');
+        if (isAllowedStartTime(time, date)) slots.push(time);
+      }
+      return slots;
+    }
+
     function timeButtonHtml(time) {
-      return `<button type="button" class="timeSlot" data-time="${time}" onclick="selectStartTime('${time}', this)">${time}</button>`;
+      const unavailable = !isSelectableStartTime(time, $('date').value);
+      const action = unavailable
+        ? 'disabled aria-disabled="true" title="此預約會與已預約或封鎖時段重疊"'
+        : `onclick="selectStartTime('${time}', this)"`;
+      return `<button type="button" class="timeSlot" data-time="${time}" ${action}>${time}</button>`;
     }
 
     function renderAvailableTimeButtons() {
@@ -1583,7 +1606,7 @@
       }
 
       const previous = selectedTime();
-      const slots = buildAvailableStartTimes();
+      const slots = buildDisplayedStartTimes();
 
       if (!slots.length) {
         renderTimePickerUnavailable('這天目前已無可預約時段，請換其他日期看看 ♡');
@@ -1603,7 +1626,7 @@
       $('morningTimeSlots').innerHTML = morning.map(timeButtonHtml).join('');
       $('laterTimeSlots').innerHTML = later.map(timeButtonHtml).join('');
 
-      if (previous && slots.includes(previous)) {
+      if (previous && slots.includes(previous) && isSelectableStartTime(previous, date)) {
         const btn = document.querySelector('.timeSlot[data-time="' + previous + '"]');
         if (btn) selectStartTime(previous, btn, false);
       } else {
@@ -1616,6 +1639,10 @@
     async function selectStartTime(time, button, runCheck = true) {
       const date = $('date').value;
       if (!date) return;
+      if (!isSelectableStartTime(time, date)) {
+        clearSelectedTime();
+        return;
+      }
 
       // 若目前畫面是由月快取產生，或最新單日同步已超過 15 秒，
       // 先快速更新一次該日狀態，避免使用者選到舊時段。
