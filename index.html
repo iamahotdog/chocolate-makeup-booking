@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- Chocolate booking release: 20260930-v3 -->
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
@@ -374,9 +375,8 @@
               <div id="timeUnavailableState" class="timeState bad hidden"></div>
             </div>
 
-            <button id="refreshBookingTimes" type="button" class="control" style="margin-top:8px" onclick="refreshBookingAvailability(true)">更新可預約時間</button>
             <input id="selectedStartTime" type="hidden">
-            <div class="fieldHint">以下僅顯示目前可預約時段。平日 10:00 後至 14:00 前暫不開放預約。</div>
+            <div class="fieldHint">以下僅顯示目前可預約時段。<span id="makeoverWeekdayHint" class="hidden">平日 10:00 後至 14:00 前暫不開放預約。</span></div>
           </div>
 
           <div id="peopleFields" class="field">
@@ -742,7 +742,7 @@
     }
 
     function monthCacheStorageKey(month) {
-      return 'choco_month_occ_v2_' + month;
+      return 'choco_month_occ_v3_' + month;
     }
 
     function invalidateBookingCache(dateKey = '') {
@@ -1265,6 +1265,7 @@
       switchView('services', 'formPage', 'fwd');
       $('result').innerHTML = '';
       $('formTitle').textContent = names[id];
+      $('makeoverWeekdayHint').classList.toggle('hidden', id !== 'makeover');
 
       // 拍婚紗以「妝造套數」為主要數量欄位；一對一不顯示人數。
       $('peopleFields').classList.toggle('hidden', id === 'lesson' || id === 'wedding');
@@ -1395,10 +1396,10 @@
       if (serviceId === 'lesson') {
         return day === 0 || day === 6 ? time === '11:00' : false;
       }
-      if (day === 0 || day === 6) return true;
+      if (serviceId !== 'makeover' || day === 0 || day === 6) return true;
       const [h, m] = time.split(':').map(Number);
       const mins = h * 60 + m;
-      // 平日 10:10–13:55 不開放；10:00、10:05 與 14:00 後可選。
+      // 僅妝髮換頭魔法：平日 10:00 後至 14:00 前不開放。
       return mins <= 600 || mins >= 840;
     }
 
@@ -2140,10 +2141,8 @@
       if (!manual && Date.now() - lastAvailabilityRefreshAttempt < 5000) return Promise.resolve();
       lastAvailabilityRefreshAttempt = Date.now();
       availabilityRefreshTask = (async () => {
-        const button = $('refreshBookingTimes');
-        button.disabled = true;
-        button.textContent = '正在更新…';
-        try {
+        // 自動同步，無需消費者手動更新。
+        {
           if (calendarOpen) {
             const month = monthKeyFromDate(bookingCalendarCursor);
             const seq = ++bookingCalendarRenderSeq;
@@ -2154,9 +2153,6 @@
             if (manual && serviceId !== 'lesson') renderTimePickerLoading();
             await loadDayOccupancy(true);
           }
-        } finally {
-          button.disabled = false;
-          button.textContent = '更新可預約時間';
         }
       })().finally(() => { availabilityRefreshTask = null; });
       return availabilityRefreshTask;
