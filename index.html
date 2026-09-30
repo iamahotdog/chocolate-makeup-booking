@@ -374,6 +374,7 @@
               <div id="timeUnavailableState" class="timeState bad hidden"></div>
             </div>
 
+            <button id="refreshBookingTimes" type="button" class="control" style="margin-top:8px" onclick="refreshBookingAvailability(true)">更新可預約時間</button>
             <input id="selectedStartTime" type="hidden">
             <div class="fieldHint">以下僅顯示目前可預約時段。平日 10:00 後至 14:00 前暫不開放預約。</div>
           </div>
@@ -718,18 +719,9 @@
           return;
         }
 
-        // 有月快取時先立即顯示，避免使用者等待；
-        // 但仍在背景強制同步該日最新預約，避免 stale cache 讓舊時段可點。
-        const hydrated = hydrateDayOccupancyFromMonthCache($('date').value);
-        if (hydrated) {
-          renderAvailableTimeButtons();
-          loadDayOccupancy(true).catch(() => {});
-          return;
-        }
-
+        // 每次選日期都確認最新狀態，取消後的時段不沿用舊月快取。
         renderTimePickerLoading();
         await loadDayOccupancy(true);
-        renderAvailableTimeButtons();
       });
     }
 
@@ -741,6 +733,7 @@
     let bookingCalendarCursor = new Date();
     let publicMonthOccupancyCache = {};
     let bookingCalendarRenderSeq = 0;
+    let monthOccupancySeq = {};
     const MONTH_OCCUPANCY_TTL = 60000;
     const MONTH_LOCAL_CACHE_TTL = 5 * 60 * 1000;
 
@@ -749,12 +742,17 @@
     }
 
     function monthCacheStorageKey(month) {
-      return 'choco_month_occ_' + month;
+      return 'choco_month_occ_v2_' + month;
     }
 
     function invalidateBookingCache(dateKey = '') {
       try {
         const month = String(dateKey || '').slice(0, 7);
+        const months = month ? [month] : Object.keys(publicMonthOccupancyCache);
+        months.forEach(m => {
+          monthOccupancySeq[m] = (monthOccupancySeq[m] || 0) + 1;
+          delete publicMonthOccupancyCache[m];
+        });
         if (month) {
           delete publicMonthOccupancyCache[month];
           localStorage.removeItem(monthCacheStorageKey(month));
@@ -767,6 +765,8 @@
         });
       } catch (_) {}
 
+      occupancySeq++;
+      lastFreshOccupancyAt = 0;
       currentDayOccupancy = null;
     }
 
@@ -787,10 +787,10 @@
       }
     }
 
-    function saveMonthCache(month, data) {
+    function saveMonthCache(month, data, syncedAt = Date.now()) {
       try {
         localStorage.setItem(monthCacheStorageKey(month), JSON.stringify({
-          ts: Date.now(),
+          ts: syncedAt,
           closedDates: Array.from(data.closedDates || []),
           intervalsByDate: data.intervalsByDate || {},
           version: data.version || 0
@@ -809,15 +809,16 @@
         return cached.data;
       }
 
+      const seq = monthOccupancySeq[month] = (monthOccupancySeq[month] || 0) + 1;
       try {
         const r = await jsonp(
-          { action: 'public_month_occupancy', month: month, ts: Date.now() },
+          { action: 'public_month_occupancy', month: month, fresh: force ? '1' : '0', ts: Date.now() },
           10000,
           2
         );
 
         const raw = r && r.data ? r.data : null;
-        if (!raw) throw new Error('empty month occupancy');
+        if (!r || r.ok === false || !raw) throw new Error('empty month occupancy');
 
         const data = {
           closedDates: new Set(raw.closedDates || []),
@@ -826,6 +827,7 @@
           partial: false
         };
 
+        if (seq !== monthOccupancySeq[month]) return publicMonthOccupancyCache[month]?.data || { closedDates: new Set(), intervalsByDate: {}, partial: true };
         publicMonthOccupancyCache[month] = { ts: Date.now(), data };
         saveMonthCache(month, data);
         return data;
@@ -833,9 +835,11 @@
         console.warn('month occupancy load failed', e);
 
         // 有舊快取就先繼續用，避免整個月曆卡住。
-        if (cached && cached.data) {
+        if (cached && cached.data && !force) {
           return cached.data;
         }
+        // 強制同步失敗時允許選日期，再由單日 API 確認，避免舊占用鎖住整天。
+        if (force) return { closedDates: new Set(), intervalsByDate: {}, partial: true };
 
         try {
           const fallback = await jsonp(
@@ -970,7 +974,7 @@
 
       // 背景刷新最新狀態，完成後無縫更新。
       const seq = ++bookingCalendarRenderSeq;
-      const fresh = await getPublicMonthOccupancy(month, false);
+      const fresh = await getPublicMonthOccupancy(month, true);
       if (seq !== bookingCalendarRenderSeq) return;
       if (month !== monthKeyFromDate(bookingCalendarCursor)) return;
       renderCalendarShell(fresh);
@@ -993,7 +997,7 @@
       renderCalendarShell(cached || null);
 
       const seq = ++bookingCalendarRenderSeq;
-      const fresh = await getPublicMonthOccupancy(month, false);
+      const fresh = await getPublicMonthOccupancy(month, true);
       if (seq !== bookingCalendarRenderSeq) return;
       if (month !== monthKeyFromDate(bookingCalendarCursor)) return;
       renderCalendarShell(fresh);
@@ -1023,6 +1027,7 @@
         if (!month || !occ || occ.date !== dateKey) return;
 
         let cached = publicMonthOccupancyCache[month]?.data || restoreMonthCache(month);
+        const monthSyncedAt = publicMonthOccupancyCache[month]?.ts || 0;
         if (!cached || cached.partial) return;
 
         const closedDates = new Set(cached.closedDates || []);
@@ -1039,8 +1044,9 @@
           partial: false
         };
 
-        publicMonthOccupancyCache[month] = { ts: Date.now(), data };
-        saveMonthCache(month, data);
+        // 單日更新不能延長其他日期的快取期限。
+        publicMonthOccupancyCache[month] = { ts: monthSyncedAt, data };
+        saveMonthCache(month, data, monthSyncedAt);
       } catch (e) {
         console.warn('sync fresh day cache failed', e);
       }
@@ -1053,8 +1059,7 @@
       lastFreshOccupancyAt = 0;
       clearSelectedTime();
 
-      // 月曆資料若已經完整，就直接拿來產生時間，不再多打一支 API。
-      hydrateDayOccupancyFromMonthCache(dateKey);
+      // change 事件會強制讀取最新單日狀態。
 
       $('date').dispatchEvent(new Event('change'));
       closeBookingCalendar();
@@ -1410,6 +1415,7 @@
       const date = $('date').value;
       if (!date) return null;
 
+      const requestedService = serviceId;
       const key = dayOccupancyKey();
       const cached = dayOccupancyCache[key];
       if (cached && !force && Date.now() - cached.ts < 60000) {
@@ -1426,11 +1432,11 @@
           2
         );
 
-        if (seq !== occupancySeq) return null;
+        if (seq !== occupancySeq || $('date').value !== date || serviceId !== requestedService) return null;
         if (!r || r.ok === false) throw new Error('invalid occupancy');
 
         const occ = (r.data && r.data.date) ? r.data : r;
-        if (!occ || !occ.date) throw new Error('missing occupancy');
+        if (!occ || occ.date !== date || !Array.isArray(occ.intervals)) throw new Error('invalid occupancy date or intervals');
 
         currentDayOccupancy = occ;
         dayOccupancyCache[key] = { ts: Date.now(), data: occ };
@@ -1443,6 +1449,10 @@
 
         return occ;
       } catch (e) {
+        if (seq !== occupancySeq || $('date').value !== date || serviceId !== requestedService) return null;
+        currentDayOccupancy = null;
+        lastFreshOccupancyAt = 0;
+        delete dayOccupancyCache[key];
         console.warn('day occupancy failed', e);
 
         if (serviceId !== 'lesson') {
@@ -1589,7 +1599,7 @@
 
       // 若目前畫面是由月快取產生，或最新單日同步已超過 15 秒，
       // 先快速更新一次該日狀態，避免使用者選到舊時段。
-      if (Date.now() - lastFreshOccupancyAt > 15000) {
+      if (runCheck && Date.now() - lastFreshOccupancyAt > 15000) {
         const fresh = await loadDayOccupancy(true);
         if (!fresh || !isSelectableStartTime(time, date)) {
           clearSelectedTime();
@@ -2040,6 +2050,7 @@
         return;
       }
 
+      if (availabilityRefreshTask) await availabilityRefreshTask;
       const b = $('submit');
       b.disabled = true;
       b.textContent = '確認時段中...';
@@ -2117,6 +2128,50 @@
       }
     }
 
+    let availabilityRefreshTask = null;
+    let lastAvailabilityRefreshAttempt = 0;
+
+    function refreshBookingAvailability(manual = false) {
+      if ($('submit').disabled) return Promise.resolve();
+      const calendarOpen = $('bookingCalendar').classList.contains('show');
+      const formOpen = $('formPage').style.display !== 'none' && !$('formPage').classList.contains('hidden');
+      if (!calendarOpen && (!formOpen || !$('date').value || $('result').innerHTML.trim())) return Promise.resolve();
+      if (availabilityRefreshTask) return availabilityRefreshTask;
+      if (!manual && Date.now() - lastAvailabilityRefreshAttempt < 5000) return Promise.resolve();
+      lastAvailabilityRefreshAttempt = Date.now();
+      availabilityRefreshTask = (async () => {
+        const button = $('refreshBookingTimes');
+        button.disabled = true;
+        button.textContent = '正在更新…';
+        try {
+          if (calendarOpen) {
+            const month = monthKeyFromDate(bookingCalendarCursor);
+            const seq = ++bookingCalendarRenderSeq;
+            const fresh = await getPublicMonthOccupancy(month, true);
+            if (seq === bookingCalendarRenderSeq && month === monthKeyFromDate(bookingCalendarCursor)) renderCalendarShell(fresh);
+          }
+          if (formOpen && $('date').value) {
+            if (manual && serviceId !== 'lesson') renderTimePickerLoading();
+            await loadDayOccupancy(true);
+          }
+        } finally {
+          button.disabled = false;
+          button.textContent = '更新可預約時間';
+        }
+      })().finally(() => { availabilityRefreshTask = null; });
+      return availabilityRefreshTask;
+    }
+
+    window.addEventListener('pageshow', () => refreshBookingAvailability());
+    window.addEventListener('storage', event => {
+      if (event.key !== 'choco_booking_changed') return;
+      invalidateBookingCache($('date').value);
+      refreshBookingAvailability(true);
+    });
+    setInterval(() => {
+      if (document.visibilityState === 'visible') refreshBookingAvailability();
+    }, 30000);
+
     // ===== 初始化 =====
     initForm();
 
@@ -2131,10 +2186,12 @@
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') {
         loadServiceSettings(true);
+        refreshBookingAvailability();
       }
     });
 
     window.addEventListener('focus', () => {
+      refreshBookingAvailability();
       if (Date.now() - lastServiceSettingsSync > 15000) {
         loadServiceSettings(true);
       }

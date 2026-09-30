@@ -602,11 +602,22 @@
       $('modal').classList.remove('show');
     }
 
+    function invalidatePublicBookingCaches() {
+      // 同一網站的前臺分頁會收到 storage 通知；其他裝置由前臺重新同步。
+      try {
+        Object.keys(localStorage).forEach(key => {
+          if (key.startsWith('choco_month_occ_') || key.startsWith('choco_list_')) localStorage.removeItem(key);
+        });
+        localStorage.setItem('choco_booking_changed', Date.now() + '_' + Math.random());
+      } catch (_) {}
+    }
+
     async function runAction(id, action) {
       toast('處理中…');
       try {
         const r = await jsonp({ action: 'admin_action', adminKey: adminKey, bookingId: id, adminAction: action, ts: Date.now() });
         if (!r.ok) throw new Error(apiErrorMessage(r));
+        invalidatePublicBookingCaches();
         const msg = [r.data && r.data.message, r.data && r.data.lineNotice].filter(Boolean).join('\n');
         toast(msg || '操作成功');
         await loadFilterFast(filter, true);
