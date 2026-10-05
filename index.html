@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Chocolate booking release: 20261005-v10-lesson-fast-feb2027 -->
+<!-- Chocolate booking release: 20261005-v11-month-occ-snap -->
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
@@ -746,15 +746,15 @@
     const monthOccupancyInFlight = {};
     const BOOKING_BUFFER_MINUTES = 30;
     const LESSON_BOOKING_START_DATE = '2027-02-01';
-    const MONTH_OCCUPANCY_TTL = 30000;
-    const MONTH_LOCAL_CACHE_TTL = 30000;
+    const MONTH_OCCUPANCY_TTL = 180000;
+    const MONTH_LOCAL_CACHE_TTL = 180000;
 
     function monthKeyFromDate(d) {
       return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
     }
 
     function monthCacheStorageKey(month) {
-      return 'choco_month_occ_v6_fast_' + month;
+      return 'choco_month_occ_v7_snap_' + month;
     }
 
     function invalidateBookingCache(dateKey = '') {
@@ -782,17 +782,19 @@
       currentDayOccupancy = null;
     }
 
-    function restoreMonthCache(month) {
+    function restoreMonthCache(month, allowStale = false) {
       try {
         const raw = JSON.parse(localStorage.getItem(monthCacheStorageKey(month)) || 'null');
-        if (!raw || !raw.ts || Date.now() - raw.ts > MONTH_LOCAL_CACHE_TTL) return null;
+        if (!raw || !raw.ts) return null;
+        const stale = Date.now() - raw.ts > MONTH_LOCAL_CACHE_TTL;
+        if (stale && !allowStale) return null;
         const data = {
           closedDates: new Set(raw.closedDates || []),
           intervalsByDate: raw.intervalsByDate || {},
           version: raw.version || 0,
           partial: false
         };
-        publicMonthOccupancyCache[month] = { ts: raw.ts, data };
+        publicMonthOccupancyCache[month] = { ts: stale ? 0 : raw.ts, data };
         return data;
       } catch (_) {
         return null;
@@ -1018,9 +1020,9 @@
       document.body.classList.add('modalOpen');
 
       const month = monthKeyFromDate(bookingCalendarCursor);
-      const cached = publicMonthOccupancyCache[month]?.data || restoreMonthCache(month);
+      const cached = publicMonthOccupancyCache[month]?.data || restoreMonthCache(month, true);
 
-      // 先立即畫出日曆，不等 API。
+      // 先立即畫出日曆，不等 API；過期快取只當骨架，仍會背景更新。
       renderCalendarShell(cached || null);
 
       // 背景刷新最新狀態，完成後無縫更新。
@@ -1046,7 +1048,7 @@
       bookingCalendarCursor = nextCursor;
 
       const month = monthKeyFromDate(bookingCalendarCursor);
-      const cached = publicMonthOccupancyCache[month]?.data || restoreMonthCache(month);
+      const cached = publicMonthOccupancyCache[month]?.data || restoreMonthCache(month, true);
       renderCalendarShell(cached || null);
 
       const seq = ++bookingCalendarRenderSeq;
