@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Chocolate booking release: 20261005-v7-wedding4h-buffer30 -->
+<!-- Chocolate booking release: 20261005-v10-lesson-fast-feb2027 -->
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
@@ -330,7 +330,7 @@
           <button id="lessonBookBtn" class="bookBtn" onclick="openForm('lesson')">預約</button>
         </div>
         <div class="oaCard" style="margin: 12px 0 0;">
-          🥨 11:00–15:00，一次 4 小時（不接受加時）<br>
+          🥨 2027 年 2 月起｜週末 11:00–15:00，一次 4 小時（不接受加時）<br>
           ❗ 目前僅開放假日預約；若因職業或個人因素僅能平日／假日晚間，再私訊巧克力討論
         </div>
       </article>
@@ -347,11 +347,12 @@
         <div class="formBody">
           <div class="field">
             <label class="requiredLabel">想預約哪一天？</label>
-            <button id="datePickerBtn" type="button" class="control datePickerBtn" onclick="openBookingCalendar()" aria-label="選擇預約日期">
+            <button id="datePickerBtn" type="button" class="control datePickerBtn" onclick="openBookingCalendar(this.dataset.service)" aria-label="選擇預約日期">
               <span id="dateDisplay">請選擇日期</span>
               <span aria-hidden="true">📅</span>
             </button>
             <input id="date" type="hidden" required>
+            <div id="lessonBookingStartHint" class="fieldHint hidden">1 對 1 美妝教學目前開放 2027 年 2 月起的週末預約 ♡</div>
           </div>
 
           <div id="timeField" class="field">
@@ -558,13 +559,13 @@
   <div id="bookingCalendar" class="calendarModal" role="dialog" aria-modal="true" aria-label="選擇預約日期">
     <div class="calendarCard">
       <div class="calendarHead">
-        <button type="button" onclick="shiftBookingCalendar(-1)">‹</button>
+        <button id="bookingCalendarPrev" type="button" onclick="shiftBookingCalendar(-1)">‹</button>
         <div id="bookingCalendarTitle" class="calendarTitle"></div>
         <button type="button" onclick="shiftBookingCalendar(1)">›</button>
       </div>
       <div class="calendarWeek"><span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span></div>
       <div id="bookingCalendarDays" class="calendarDays"></div>
-      <div class="calendarHint">灰色日期為該時間預約已滿</div>
+      <div id="bookingCalendarHint" class="calendarHint">灰色日期目前不開放預約</div>
       <button type="button" class="calendarClose" onclick="closeBookingCalendar()">取消</button>
     </div>
   </div>
@@ -744,15 +745,16 @@
     let monthOccupancySeq = {};
     const monthOccupancyInFlight = {};
     const BOOKING_BUFFER_MINUTES = 30;
-    const MONTH_OCCUPANCY_TTL = 60000;
-    const MONTH_LOCAL_CACHE_TTL = 5 * 60 * 1000;
+    const LESSON_BOOKING_START_DATE = '2027-02-01';
+    const MONTH_OCCUPANCY_TTL = 30000;
+    const MONTH_LOCAL_CACHE_TTL = 30000;
 
     function monthKeyFromDate(d) {
       return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
     }
 
     function monthCacheStorageKey(month) {
-      return 'choco_month_occ_v4_buffer30_' + month;
+      return 'choco_month_occ_v6_fast_' + month;
     }
 
     function invalidateBookingCache(dateKey = '') {
@@ -835,7 +837,7 @@
       const seq = monthOccupancySeq[month] = (monthOccupancySeq[month] || 0) + 1;
       try {
         const r = await jsonp(
-          { action: 'public_month_occupancy', month: month, fresh: '1', ts: Date.now() },
+          { action: 'public_month_occupancy', month: month, fresh: force ? '1' : '0', ts: Date.now() },
           10000,
           2
         );
@@ -900,6 +902,7 @@
       const weekday = d.getDay();
 
       if (serviceId === 'lesson') {
+        if (dateKey < minimumBookingDateKey()) return false;
         if (weekday !== 0 && weekday !== 6) return false;
         return !intervalsOverlap(660, 900 + BOOKING_BUFFER_MINUTES, intervals);
       }
@@ -919,12 +922,34 @@
       return false;
     }
 
+    function minimumBookingDateKey() {
+      const now = new Date();
+      const tomorrow = localDateString(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1));
+      return serviceId === 'lesson' && tomorrow < LESSON_BOOKING_START_DATE ? LESSON_BOOKING_START_DATE : tomorrow;
+    }
+
+    function bookingCalendarBaseDate() {
+      const minDate = minimumBookingDateKey();
+      const selected = $('date').value;
+      return new Date((selected && selected >= minDate ? selected : minDate) + 'T12:00:00');
+    }
+
     function renderCalendarShell(monthOcc = null) {
+      if (serviceId === 'lesson' && monthKeyFromDate(bookingCalendarCursor) < minimumBookingDateKey().slice(0, 7)) {
+        const minDate = new Date(minimumBookingDateKey() + 'T12:00:00');
+        bookingCalendarCursor = new Date(minDate.getFullYear(), minDate.getMonth(), 1);
+      }
+      const occupancyReady = !!monthOcc && !monthOcc.partial;
+      $('bookingCalendarHint').textContent = serviceId === 'lesson'
+        ? (occupancyReady ? '僅開放週末 11:00–15:00；灰色日期目前不開放預約' : '正在確認週末 11:00–15:00 的可預約日期…')
+        : '灰色日期目前不開放預約';
       const y = bookingCalendarCursor.getFullYear();
       const m = bookingCalendarCursor.getMonth();
       const box = $('bookingCalendarDays');
       $('bookingCalendarTitle').textContent = y + ' 年 ' + (m + 1) + ' 月';
       box.innerHTML = '';
+      const minDateKey = minimumBookingDateKey();
+      $('bookingCalendarPrev').disabled = monthKeyFromDate(bookingCalendarCursor) <= minDateKey.slice(0, 7);
 
       const firstDay = new Date(y, m, 1).getDay();
       const daysInMonth = new Date(y, m + 1, 0).getDate();
@@ -947,8 +972,8 @@
         const weekday = d.getDay();
         const beforeTomorrow = d.getTime() < tomorrow.getTime();
 
-        let disabled = beforeTomorrow;
-        if (serviceId === 'lesson' && weekday !== 0 && weekday !== 6) disabled = true;
+        let disabled = beforeTomorrow || dateKey < minDateKey;
+        if (serviceId === 'lesson' && (weekday !== 0 && weekday !== 6 || !occupancyReady)) disabled = true;
 
         if (monthOcc) {
           const isClosed = monthOcc.closedDates.has(dateKey);
@@ -973,22 +998,20 @@
     }
 
     function preloadBookingCalendarData(force = false) {
-      const base = $('date').value
-        ? new Date($('date').value + 'T12:00:00')
-        : new Date();
+      const base = bookingCalendarBaseDate();
       const month = monthKeyFromDate(base);
       const nextMonth = monthKeyFromDate(new Date(base.getFullYear(), base.getMonth() + 1, 1));
       // 先準備本月，再準備下月；不一次送出兩筆額外請求。
+      const preloadNext = serviceId !== 'lesson';
       return getPublicMonthOccupancy(month, force).then(data => {
-        if (!data.partial) getPublicMonthOccupancy(nextMonth, false).catch(() => {});
+        if (preloadNext && !data.partial) getPublicMonthOccupancy(nextMonth, false).catch(() => {});
         return data;
       }).catch(() => null);
     }
 
-    async function openBookingCalendar() {
-      const base = $('date').value
-        ? new Date($('date').value + 'T12:00:00')
-        : new Date();
+    async function openBookingCalendar(requestedService) {
+      if (requestedService && names[requestedService]) serviceId = requestedService;
+      const base = bookingCalendarBaseDate();
 
       bookingCalendarCursor = new Date(base.getFullYear(), base.getMonth(), 1);
       $('bookingCalendar').classList.add('show');
@@ -1002,7 +1025,7 @@
 
       // 背景刷新最新狀態，完成後無縫更新。
       const seq = ++bookingCalendarRenderSeq;
-      const fresh = await getPublicMonthOccupancy(month, true);
+      const fresh = await getPublicMonthOccupancy(month, false);
       if (seq !== bookingCalendarRenderSeq) return;
       if (month !== monthKeyFromDate(bookingCalendarCursor)) return;
       renderCalendarShell(fresh);
@@ -1014,18 +1037,20 @@
     }
 
     async function shiftBookingCalendar(delta) {
-      bookingCalendarCursor = new Date(
+      const nextCursor = new Date(
         bookingCalendarCursor.getFullYear(),
         bookingCalendarCursor.getMonth() + delta,
         1
       );
+      if (monthKeyFromDate(nextCursor) < minimumBookingDateKey().slice(0, 7)) return;
+      bookingCalendarCursor = nextCursor;
 
       const month = monthKeyFromDate(bookingCalendarCursor);
       const cached = publicMonthOccupancyCache[month]?.data || restoreMonthCache(month);
       renderCalendarShell(cached || null);
 
       const seq = ++bookingCalendarRenderSeq;
-      const fresh = await getPublicMonthOccupancy(month, true);
+      const fresh = await getPublicMonthOccupancy(month, false);
       if (seq !== bookingCalendarRenderSeq) return;
       if (month !== monthKeyFromDate(bookingCalendarCursor)) return;
       renderCalendarShell(fresh);
@@ -1081,6 +1106,7 @@
     }
 
     function selectBookingDate(dateKey) {
+      if (dateKey < minimumBookingDateKey()) return;
       $('date').value = dateKey;
       $('dateDisplay').textContent = dateKey.replace(/-/g, '/');
       currentDayOccupancy = null;
@@ -1100,7 +1126,7 @@
       if (!value) return false;
       const now = new Date();
       const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-      const minDate = localDateString(tomorrow);
+      const minDate = minimumBookingDateKey();
 
       // 明天之後皆可正常選擇；只有今天或過去日期才自動調整。
       if (value >= minDate) {
@@ -1112,7 +1138,7 @@
       clearSelectedTime();
       if (!suppressDateModal) {
         suppressDateModal = true;
-        showBrandModal('日期已調整', '今天的魔法時段已經收單囉🪄 請幫我選明天之後的日期。', '🪄', '好的', null, () => { suppressDateModal = false; });
+        showBrandModal('日期已調整', serviceId === 'lesson' && value < LESSON_BOOKING_START_DATE ? '1 對 1 美妝教學目前開放 2027 年 2 月起的週末預約 ♡' : '今天的魔法時段已經收單囉🪄 請幫我選明天之後的日期。', '🪄', '好的', null, () => { suppressDateModal = false; });
         return false;
       }
       return false;
@@ -1123,7 +1149,7 @@
       if (!el || !el.value) return true;
       const now = new Date();
       const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-      const minDate = localDateString(tomorrow);
+      const minDate = minimumBookingDateKey();
       if (el.value < minDate) {
         el.value = minDate;
         return false;
@@ -1290,6 +1316,14 @@
       }
 
       serviceId = id;
+      $('datePickerBtn').dataset.service = id;
+      const calendarBase = bookingCalendarBaseDate();
+      bookingCalendarCursor = new Date(calendarBase.getFullYear(), calendarBase.getMonth(), 1);
+      $('lessonBookingStartHint').classList.toggle('hidden', id !== 'lesson');
+      if ($('date').value && $('date').value < minimumBookingDateKey()) {
+        $('date').value = '';
+        $('dateDisplay').textContent = '請選擇日期';
+      }
       switchView('services', 'formPage', 'fwd');
       $('result').innerHTML = '';
       $('formTitle').textContent = names[id];
@@ -1422,6 +1456,7 @@
       const d = new Date(dateStr + 'T12:00:00');
       const day = d.getDay();
       if (serviceId === 'lesson') {
+        if (dateStr < minimumBookingDateKey()) return false;
         return day === 0 || day === 6 ? time === '11:00' : false;
       }
       if (serviceId !== 'makeover' || day === 0 || day === 6) return true;
@@ -2195,7 +2230,7 @@
           if (calendarOpen) {
             const month = monthKeyFromDate(bookingCalendarCursor);
             const seq = ++bookingCalendarRenderSeq;
-            const fresh = await getPublicMonthOccupancy(month, true);
+            const fresh = await getPublicMonthOccupancy(month, manual);
             if (seq === bookingCalendarRenderSeq && month === monthKeyFromDate(bookingCalendarCursor)) renderCalendarShell(fresh);
           }
           if (formOpen && $('date').value) {
@@ -2229,7 +2264,7 @@
     initLiff();
 
     // 首頁就開始準備日期狀態，不必等到點開服務才讀取。
-    setTimeout(() => preloadBookingCalendarData(true), 100);
+    // 選擇服務後才預載其目標月份，避免先讀取不會使用的本月資料。
 
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') {
