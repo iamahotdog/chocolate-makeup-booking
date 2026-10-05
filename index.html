@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Chocolate booking release: 20261005-v6-buffer30 -->
+<!-- Chocolate booking release: 20261005-v7-wedding4h-buffer30 -->
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
@@ -416,6 +416,7 @@
               <input id="sets" value="1" readonly required>
               <button type="button" onclick="step('sets', 1)">+</button>
             </div>
+            <div class="fieldHint">每套以女生 3 小時＋男生 1 小時計算，共 4 小時；預約後另保留 30 分鐘緩衝 ♡</div>
           </div>
 
           <div id="availability" class="notice hidden"></div>
@@ -1301,7 +1302,7 @@
       $('peopleLabel').textContent = id === 'makeover' ? '人數／性別' : '今天要變漂亮的人數';
 
       $('female').value = '1';
-      $('male').value = '0';
+      $('male').value = id === 'wedding' ? '1' : '0';
       $('sets').value = '1';
 
       // 依目前服務規則提供地點。
@@ -1692,7 +1693,8 @@
     function estimateServiceMinutesLocal() {
       const f = parseInt($('female').value, 10) || 0;
       const m = parseInt($('male').value, 10) || 0;
-      if (serviceId === 'registration' || serviceId === 'wedding') return f * 180 + m * 60;
+      if (serviceId === 'wedding') return Math.max(1, parseInt($('sets').value, 10) || 1) * 240;
+      if (serviceId === 'registration') return f * 180 + m * 60;
       if (serviceId === 'makeover') return f * 150 + m * 60;
       if (serviceId === 'lesson') return 240;
       return 0;
