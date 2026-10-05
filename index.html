@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Chocolate booking release: 20261005-v11-month-occ-snap -->
+<!-- Chocolate booking release: 20261005-v12-calendar-confirm-first -->
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
@@ -269,6 +269,28 @@
     .calendarDay:not(.disabled):active { transform:scale(.96); }
 
 
+    .magicWait { display:flex; align-items:center; gap:12px; padding:13px 14px; margin:10px 0; border:1px solid #eddcd1; border-radius:17px; background:linear-gradient(125deg,#fffaf6,#f9eee6); }
+    .magicWaitArt { position:relative; width:66px; height:62px; flex:0 0 66px; overflow:hidden; }
+    .magicWaitGlow { position:absolute; width:43px; height:43px; left:12px; top:10px; border-radius:50%; background:#f1dbca; animation:magicGlow 2.4s ease-in-out infinite; }
+    .magicWaitBrush { position:absolute; left:29px; top:11px; width:11px; height:45px; border-radius:5px; background:linear-gradient(to right,#986b52,#bd9277,#906249); transform-origin:50% 85%; transform:rotate(-28deg); animation:magicBrush 2.4s ease-in-out infinite; }
+    .magicWaitBrush::before { content:''; position:absolute; left:-5px; top:-5px; width:21px; height:19px; border-radius:11px 11px 5px 5px; background:linear-gradient(to bottom,#b89076,#dec0a9); }
+    .magicWaitBrush::after { content:''; position:absolute; left:-1px; top:12px; width:13px; height:7px; border-radius:2px; background:#dbb79c; }
+    .magicWaitStar { position:absolute; color:#b57d58; font-size:14px; line-height:1; animation:magicTwinkle 2.4s ease-in-out infinite; }
+    .magicWaitStar.one { left:5px; top:8px; }
+    .magicWaitStar.two { right:4px; top:19px; font-size:18px; animation-delay:.65s; }
+    .magicWaitStar.three { left:10px; bottom:5px; font-size:10px; animation-delay:1.3s; }
+    .magicWaitText { min-width:0; text-align:left; }
+    .magicWaitTitle { color:#81583f; font-weight:750; font-size:12px; line-height:1.6; }
+    .magicWaitCaption { color:#a17c68; font-size:10.5px; line-height:1.6; margin-top:3px; }
+    .magicWaitDots { display:inline-flex; gap:3px; margin-left:4px; }
+    .magicWaitDots i { width:3px; height:3px; border-radius:50%; background:#b58d76; animation:magicDot 1.5s ease-in-out infinite; }
+    .magicWaitDots i:nth-child(2) { animation-delay:.2s; }
+    .magicWaitDots i:nth-child(3) { animation-delay:.4s; }
+    @keyframes magicBrush { 0%,100% { transform:rotate(-28deg) translateY(0); } 45% { transform:rotate(12deg) translateY(-3px); } 70% { transform:rotate(-8deg) translateY(-1px); } }
+    @keyframes magicGlow { 0%,100% { transform:scale(.9); opacity:.55; } 50% { transform:scale(1.08); opacity:.9; } }
+    @keyframes magicTwinkle { 0%,100% { transform:scale(.6); opacity:.25; } 50% { transform:scale(1.1); opacity:1; } }
+    @keyframes magicDot { 0%,70%,100% { transform:translateY(0); opacity:.4; } 35% { transform:translateY(-3px); opacity:1; } }
+    @media (prefers-reduced-motion: reduce) { .magicWait * { animation:none !important; } }
   </style>
   <link rel="icon" type="image/png" sizes="32x32" href="./favicon.png?v=2">
   <link rel="shortcut icon" type="image/png" href="./favicon.png?v=2">
@@ -361,25 +383,10 @@
             <div id="timePicker" class="timePicker">
               <div id="timeEmptyState" class="timeState">請先選擇日期，就會顯示目前可預約的時間 ♡</div>
 
-              <div id="timeLoadingState" class="hidden" aria-live="polite">
-                <div class="timeSkeleton" aria-hidden="true">
-                  <span></span><span></span><span></span>
+      <div id="timeLoadingState" class="magicWait hidden" role="status" aria-live="polite" aria-atomic="true">
+                  <div class="magicWaitArt" aria-hidden="true"><span class="magicWaitGlow"></span><span class="magicWaitBrush"></span><span class="magicWaitStar one">✦</span><span class="magicWaitStar two">✧</span><span class="magicWaitStar three">✦</span></div>
+                  <div class="magicWaitText"><div class="magicWaitTitle">巧克力正在翻翻行事曆<span class="magicWaitDots" aria-hidden="true"><i></i><i></i><i></i></span></div><div class="magicWaitCaption">正在確認可預約時段，稍等一下下 ♡</div></div>
                 </div>
-                <div class="fieldHint" style="text-align:center; margin-top:8px;">正在確認這天的可預約時段 ♡</div>
-              </div>
-
-              <div id="timeOptions" class="hidden">
-                <div id="morningTimeGroup" class="timeGroup hidden">
-                  <div class="timeGroupTitle">上午</div>
-                  <div id="morningTimeSlots" class="timeSlots"></div>
-                </div>
-                <div id="laterTimeGroup" class="timeGroup hidden">
-                  <div class="timeGroupTitle">下午／晚上</div>
-                  <div id="laterTimeSlots" class="timeSlots"></div>
-                </div>
-                <div id="timePicked" class="timePicked hidden"></div>
-              </div>
-
               <div id="timeUnavailableState" class="timeState bad hidden"></div>
             </div>
 
@@ -564,6 +571,10 @@
         <button type="button" onclick="shiftBookingCalendar(1)">›</button>
       </div>
       <div class="calendarWeek"><span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span></div>
+      <div id="calendarLoadingAnimation" class="magicWait hidden" role="status" aria-live="polite" aria-atomic="true">
+                  <div class="magicWaitArt" aria-hidden="true"><span class="magicWaitGlow"></span><span class="magicWaitBrush"></span><span class="magicWaitStar one">✦</span><span class="magicWaitStar two">✧</span><span class="magicWaitStar three">✦</span></div>
+                  <div class="magicWaitText"><div class="magicWaitTitle">巧克力正在翻翻行事曆<span class="magicWaitDots" aria-hidden="true"><i></i><i></i><i></i></span></div><div class="magicWaitCaption">正在整理可預約日期，稍等一下下 ♡</div></div>
+                </div>
       <div id="bookingCalendarDays" class="calendarDays"></div>
       <div id="bookingCalendarHint" class="calendarHint">灰色日期目前不開放預約</div>
       <button type="button" class="calendarClose" onclick="closeBookingCalendar()">取消</button>
@@ -720,16 +731,18 @@
         clearSelectedTime();
         notice('', '');
 
+        const date = $('date').value;
+        const hydrated = hydrateDayOccupancyFromMonthCache(date);
+
         if (serviceId === 'lesson') {
-          // 教學固定 11:00；選完日期就強制抓一次最新單日狀態。
           $('selectedStartTime').value = '11:00';
           await loadDayOccupancy(true);
           scheduleCheck();
           return;
         }
 
-        // 每次選日期都確認最新狀態，取消後的時段不沿用舊月快取。
-        renderTimePickerLoading();
+        if (hydrated) renderAvailableTimeButtons();
+        else renderTimePickerLoading();
         await loadDayOccupancy(true);
       });
     }
@@ -746,15 +759,21 @@
     const monthOccupancyInFlight = {};
     const BOOKING_BUFFER_MINUTES = 30;
     const LESSON_BOOKING_START_DATE = '2027-02-01';
-    const MONTH_OCCUPANCY_TTL = 180000;
-    const MONTH_LOCAL_CACHE_TTL = 180000;
+    const MONTH_OCCUPANCY_TTL = 30000;
+    const MONTH_LOCAL_CACHE_TTL = 30000;
+
+    function usableMonthOccupancy(month) {
+      const entry = publicMonthOccupancyCache[month];
+      if (entry && Date.now() - entry.ts < MONTH_OCCUPANCY_TTL && !entry.data.partial) return entry.data;
+      return restoreMonthCache(month);
+    }
 
     function monthKeyFromDate(d) {
       return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
     }
 
     function monthCacheStorageKey(month) {
-      return 'choco_month_occ_v7_snap_' + month;
+      return 'choco_month_occ_v8_consistent_' + month;
     }
 
     function invalidateBookingCache(dateKey = '') {
@@ -825,6 +844,24 @@
       return entry.promise;
     }
 
+    async function readBookingDataAutomatically(params, validate, isCurrent = () => true) {
+      let lastError;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        if (!isCurrent()) return null;
+        try {
+          const response = await jsonp({ ...params, ts: Date.now() }, attempt === 0 ? 12000 : 14000, 1);
+          if (!isCurrent()) return null;
+          if (!validate(response)) throw new Error('Incomplete booking data');
+          return response;
+        } catch (error) {
+          lastError = error;
+          if (!isCurrent()) return null;
+          if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 800 * (attempt + 1)));
+        }
+      }
+      throw lastError || new Error('Booking data unavailable');
+    }
+
     async function fetchPublicMonthOccupancy(month, force = false) {
       let cached = publicMonthOccupancyCache[month];
       if (!cached) {
@@ -838,10 +875,11 @@
 
       const seq = monthOccupancySeq[month] = (monthOccupancySeq[month] || 0) + 1;
       try {
-        const r = await jsonp(
-          { action: 'public_month_occupancy', month: month, fresh: force ? '1' : '0', ts: Date.now() },
-          10000,
-          2
+        const r = await readBookingDataAutomatically(
+          { action: 'public_month_occupancy', month, fresh: force ? '1' : '0' },
+          r => !!r && r.ok !== false && !!r.data && Array.isArray(r.data.closedDates)
+            && !!r.data.intervalsByDate && typeof r.data.intervalsByDate === 'object',
+          () => seq === monthOccupancySeq[month]
         );
 
         const raw = r && r.data ? r.data : null;
@@ -861,37 +899,7 @@
       } catch (e) {
         console.warn('month occupancy load failed', e);
 
-        // 有舊快取就先繼續用，避免整個月曆卡住。
-        if (cached && cached.data && !force) {
-          return cached.data;
-        }
-        // 強制同步失敗時允許選日期，再由單日 API 確認，避免舊占用鎖住整天。
-        if (force) return { closedDates: new Set(), intervalsByDate: {}, partial: true };
-
-        try {
-          const fallback = await jsonp(
-            { action: 'public_closed_days', month: month, ts: Date.now() },
-            8500,
-            1
-          );
-          const dates = fallback && fallback.data && Array.isArray(fallback.data.dates)
-            ? fallback.data.dates
-            : [];
-
-          return {
-            closedDates: new Set(dates),
-            intervalsByDate: {},
-            version: 0,
-            partial: true
-          };
-        } catch (_) {
-          return {
-            closedDates: new Set(),
-            intervalsByDate: {},
-            version: 0,
-            partial: true
-          };
-        }
+        return { closedDates: new Set(), intervalsByDate: {}, partial: true };
       }
     }
 
@@ -942,9 +950,12 @@
         bookingCalendarCursor = new Date(minDate.getFullYear(), minDate.getMonth(), 1);
       }
       const occupancyReady = !!monthOcc && !monthOcc.partial;
+      $('calendarLoadingAnimation').classList.toggle('hidden', !!monthOcc);
+      $('bookingCalendar').setAttribute('aria-busy', String(!monthOcc));
       $('bookingCalendarHint').textContent = serviceId === 'lesson'
         ? (occupancyReady ? '僅開放週末 11:00–15:00；灰色日期目前不開放預約' : '正在確認週末 11:00–15:00 的可預約日期…')
-        : '灰色日期目前不開放預約';
+        : (occupancyReady ? '灰色日期目前不開放預約' : '正在確認可預約日期…確認前日期先不開放點選');
+      if (monthOcc && monthOcc.partial) $('bookingCalendarHint').textContent = '預約資料暫時無法連線，請透過官方帳號聯繫巧克力 ♡';
       const y = bookingCalendarCursor.getFullYear();
       const m = bookingCalendarCursor.getMonth();
       const box = $('bookingCalendarDays');
@@ -975,12 +986,13 @@
         const beforeTomorrow = d.getTime() < tomorrow.getTime();
 
         let disabled = beforeTomorrow || dateKey < minDateKey;
-        if (serviceId === 'lesson' && (weekday !== 0 && weekday !== 6 || !occupancyReady)) disabled = true;
+        if (serviceId === 'lesson' && (weekday !== 0 && weekday !== 6)) disabled = true;
+        if (!occupancyReady) disabled = true;
 
         if (monthOcc) {
           const isClosed = monthOcc.closedDates.has(dateKey);
           const intervals = monthOcc.intervalsByDate[dateKey] || [];
-          const noAvailability = !monthOcc.partial && !beforeTomorrow && !isClosed
+          const noAvailability = occupancyReady && !beforeTomorrow && !isClosed
             ? !dateHasAnyBookableTime(dateKey, intervals)
             : false;
           disabled = disabled || isClosed || noAvailability;
@@ -1020,7 +1032,7 @@
       document.body.classList.add('modalOpen');
 
       const month = monthKeyFromDate(bookingCalendarCursor);
-      const cached = publicMonthOccupancyCache[month]?.data || restoreMonthCache(month, true);
+      const cached = usableMonthOccupancy(month);
 
       // 先立即畫出日曆，不等 API；過期快取只當骨架，仍會背景更新。
       renderCalendarShell(cached || null);
@@ -1048,7 +1060,7 @@
       bookingCalendarCursor = nextCursor;
 
       const month = monthKeyFromDate(bookingCalendarCursor);
-      const cached = publicMonthOccupancyCache[month]?.data || restoreMonthCache(month, true);
+      const cached = usableMonthOccupancy(month);
       renderCalendarShell(cached || null);
 
       const seq = ++bookingCalendarRenderSeq;
@@ -1058,9 +1070,9 @@
       renderCalendarShell(fresh);
     }
 
-    function hydrateDayOccupancyFromMonthCache(dateKey) {
+    function hydrateDayOccupancyFromMonthCache(dateKey, allowStale = false) {
       const month = dateKey.slice(0, 7);
-      const cached = publicMonthOccupancyCache[month]?.data || restoreMonthCache(month);
+      const cached = usableMonthOccupancy(month);
       if (!cached || cached.partial) return false;
 
       currentDayOccupancy = {
@@ -1070,7 +1082,7 @@
         intervals: cached.intervalsByDate[dateKey] || []
       };
       dayOccupancyCache[serviceId + '_' + dateKey] = {
-        ts: Date.now(),
+        ts: publicMonthOccupancyCache[month]?.ts || 0,
         data: currentDayOccupancy
       };
       return true;
@@ -1081,7 +1093,7 @@
         const month = String(dateKey || '').slice(0, 7);
         if (!month || !occ || occ.date !== dateKey) return;
 
-        let cached = publicMonthOccupancyCache[month]?.data || restoreMonthCache(month);
+        let cached = usableMonthOccupancy(month);
         const monthSyncedAt = publicMonthOccupancyCache[month]?.ts || 0;
         if (!cached || cached.partial) return;
 
@@ -1111,12 +1123,9 @@
       if (dateKey < minimumBookingDateKey()) return;
       $('date').value = dateKey;
       $('dateDisplay').textContent = dateKey.replace(/-/g, '/');
-      currentDayOccupancy = null;
       lastFreshOccupancyAt = 0;
       clearSelectedTime();
-
-      // change 事件會強制讀取最新單日狀態。
-
+      hydrateDayOccupancyFromMonthCache(dateKey);
       $('date').dispatchEvent(new Event('change'));
       closeBookingCalendar();
     }
@@ -1472,9 +1481,14 @@
     let currentDayOccupancy = null;
     let occupancySeq = 0;
     let lastFreshOccupancyAt = 0;
+    const dayOccupancyInFlight = {};
 
     function dayOccupancyKey() {
       return serviceId + '_' + $('date').value;
+    }
+
+    function keepExistingDayOccupancy(date) {
+      return currentDayOccupancy && currentDayOccupancy.date === date;
     }
 
     async function loadDayOccupancy(force = false) {
@@ -1490,43 +1504,62 @@
         return currentDayOccupancy;
       }
 
+      const pending = dayOccupancyInFlight[key];
+      if (pending && pending.seq === occupancySeq && pending.force === !!force) return pending.promise;
+
       const seq = ++occupancySeq;
-      try {
-        const r = await jsonp(
-          { action: 'day_occupancy', date: date, fresh: force ? '1' : '0', ts: Date.now() },
-          9000,
-          2
-        );
+      const promise = (async () => {
+        try {
+          const r = await readBookingDataAutomatically(
+            { action: 'day_occupancy', date, fresh: force ? '1' : '0' },
+            r => { const data = r && r.data ? r.data : r; return !!r && r.ok !== false && !!data && data.date === date && Array.isArray(data.intervals); },
+            () => seq === occupancySeq && $('date').value === date && serviceId === requestedService
+          );
 
-        if (seq !== occupancySeq || $('date').value !== date || serviceId !== requestedService) return null;
-        if (!r || r.ok === false) throw new Error('invalid occupancy');
+          if (seq !== occupancySeq || $('date').value !== date || serviceId !== requestedService) {
+            return keepExistingDayOccupancy(date) ? currentDayOccupancy : null;
+          }
+          if (!r || r.ok === false) throw new Error('invalid occupancy');
 
-        const occ = (r.data && r.data.date) ? r.data : r;
-        if (!occ || occ.date !== date || !Array.isArray(occ.intervals)) throw new Error('invalid occupancy date or intervals');
+          const occ = (r.data && r.data.date) ? r.data : r;
+          if (!occ || occ.date !== date || !Array.isArray(occ.intervals)) throw new Error('invalid occupancy date or intervals');
 
-        currentDayOccupancy = occ;
-        dayOccupancyCache[key] = { ts: Date.now(), data: occ };
-        if (force) lastFreshOccupancyAt = Date.now();
-        syncFreshDayIntoMonthCache(date, occ);
+          currentDayOccupancy = occ;
+          dayOccupancyCache[key] = { ts: Date.now(), data: occ };
+          if (force) lastFreshOccupancyAt = Date.now();
+          syncFreshDayIntoMonthCache(date, occ);
 
-        if (serviceId !== 'lesson') renderAvailableTimeButtons();
-        if (selectedTime()) scheduleCheck();
-        if (serviceId === 'lesson') scheduleCheck();
+          if (serviceId !== 'lesson') renderAvailableTimeButtons();
+          if (selectedTime()) scheduleCheck();
+          if (serviceId === 'lesson') scheduleCheck();
 
-        return occ;
-      } catch (e) {
-        if (seq !== occupancySeq || $('date').value !== date || serviceId !== requestedService) return null;
-        currentDayOccupancy = null;
-        lastFreshOccupancyAt = 0;
-        delete dayOccupancyCache[key];
-        console.warn('day occupancy failed', e);
+          return occ;
+        } catch (e) {
+          if (seq !== occupancySeq || $('date').value !== date || serviceId !== requestedService) {
+            return keepExistingDayOccupancy(date) ? currentDayOccupancy : null;
+          }
+          console.warn('day occupancy failed', e);
 
-        if (serviceId !== 'lesson') {
-          renderTimePickerUnavailable('目前無法取得這天的可預約時間，請稍後再點一次日期。');
+          if (keepExistingDayOccupancy(date)) {
+            if (serviceId !== 'lesson') renderAvailableTimeButtons();
+            return currentDayOccupancy;
+          }
+
+          lastFreshOccupancyAt = 0;
+          delete dayOccupancyCache[key];
+          currentDayOccupancy = null;
+          if (serviceId !== 'lesson') renderTimePickerUnavailable('預約資料暫時無法連線，請透過官方帳號聯繫巧克力 ♡');
+          else notice('bad', '預約資料暫時無法連線，請透過官方帳號聯繫巧克力 ♡');
+          return null;
+        } finally {
+          if (dayOccupancyInFlight[key] && dayOccupancyInFlight[key].promise === promise) {
+            delete dayOccupancyInFlight[key];
+          }
         }
-        notice('', '');
-        return null;
-      }
+      })();
+
+      dayOccupancyInFlight[key] = { force: !!force, seq, promise };
+      return promise;
     }
 
     function overlapsOccupied(startTime) {
@@ -1687,10 +1720,14 @@
       // 先快速更新一次該日狀態，避免使用者選到舊時段。
       if (runCheck && Date.now() - lastFreshOccupancyAt > 15000) {
         const fresh = await loadDayOccupancy(true);
-        if (!fresh || !isSelectableStartTime(time, date)) {
+        if (fresh && !isSelectableStartTime(time, date)) {
           clearSelectedTime();
           renderAvailableTimeButtons();
           notice('bad', '這個時段目前已預約額滿，請換個時間看看 ♡');
+          return;
+        }
+        if (!fresh && !isSelectableStartTime(time, date)) {
+          clearSelectedTime();
           return;
         }
       }
@@ -2236,7 +2273,6 @@
             if (seq === bookingCalendarRenderSeq && month === monthKeyFromDate(bookingCalendarCursor)) renderCalendarShell(fresh);
           }
           if (formOpen && $('date').value) {
-            if (manual && serviceId !== 'lesson') renderTimePickerLoading();
             await loadDayOccupancy(true);
           }
         }
