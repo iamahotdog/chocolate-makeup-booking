@@ -1067,14 +1067,23 @@
       const cached = publicMonthOccupancyCache[month]?.data || restoreMonthCache(month, allowStale);
       if (!cached || cached.partial) return false;
 
+      const key = serviceId + '_' + dateKey;
+      const monthTs = publicMonthOccupancyCache[month]?.ts || 0;
+      const day = dayOccupancyCache[key];
+      // 單日同步比月快照新時，保留單日資料；不把舊快照當成剛更新。
+      if (day && day.ts >= monthTs) {
+        currentDayOccupancy = day.data;
+        return true;
+      }
+
       currentDayOccupancy = {
         ok: true,
         date: dateKey,
         closedDay: cached.closedDates.has(dateKey),
         intervals: cached.intervalsByDate[dateKey] || []
       };
-      dayOccupancyCache[serviceId + '_' + dateKey] = {
-        ts: Date.now(),
+      dayOccupancyCache[key] = {
+        ts: monthTs,
         data: currentDayOccupancy
       };
       return true;
@@ -1699,28 +1708,12 @@
       notice('', '');
     }
 
-    async function selectStartTime(time, button, runCheck = true) {
+    function selectStartTime(time, button, runCheck = true) {
       const date = $('date').value;
       if (!date) return;
       if (!isSelectableStartTime(time, date)) {
         clearSelectedTime();
         return;
-      }
-
-      // 若目前畫面是由月快取產生，或最新單日同步已超過 15 秒，
-      // 先快速更新一次該日狀態，避免使用者選到舊時段。
-      if (runCheck && Date.now() - lastFreshOccupancyAt > 15000) {
-        const fresh = await loadDayOccupancy(true);
-        if (fresh && !isSelectableStartTime(time, date)) {
-          clearSelectedTime();
-          renderAvailableTimeButtons();
-          notice('bad', '這個時段目前已預約額滿，請換個時間看看 ♡');
-          return;
-        }
-        if (!fresh && !isSelectableStartTime(time, date)) {
-          clearSelectedTime();
-          return;
-        }
       }
 
       document.querySelectorAll('.timeSlot.selected').forEach(x => x.classList.remove('selected'));
@@ -1740,7 +1733,14 @@
         $('timePicked').classList.add('hidden');
       }
 
-      if (runCheck) scheduleCheck();
+      if (runCheck) {
+        scheduleCheck();
+        // 先顯示選取結果。共用日期選擇已發出的請求，在背景更新，
+        // renderAvailableTimeButtons 會清除已衝突的選取；送出前仍強制檢查。
+        if (Date.now() - lastFreshOccupancyAt > 15000) {
+          void loadDayOccupancy(true);
+        }
+      }
     }
 
     // 舊程式其他地方仍會呼叫這個名稱，統一導向新的按鈕 UI。
