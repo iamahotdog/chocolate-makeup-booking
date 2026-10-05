@@ -428,12 +428,17 @@
       }
     }
 
+    function adminListStorageKey(filter) {
+      const day = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' });
+      return 'choco_list_v3_live_' + API_URL + '_' + day + '_' + filter;
+    }
+
     function adminLocalCacheGet(filter) {
       try {
-        const raw = localStorage.getItem('choco_list_' + filter);
+        const raw = localStorage.getItem(adminListStorageKey(filter));
         if (!raw) return null;
         const obj = JSON.parse(raw);
-        if (Date.now() - obj.ts > 30 * 24 * 60 * 60 * 1000) return null;
+        if (Date.now() - obj.ts > 60000) return null;
         return obj.items;
       } catch {
         return null;
@@ -442,13 +447,13 @@
 
     function adminLocalCacheSet(filter, items) {
       try {
-        localStorage.setItem('choco_list_' + filter, JSON.stringify({ ts: Date.now(), items: items }));
+        localStorage.setItem(adminListStorageKey(filter), JSON.stringify({ ts: Date.now(), items: items }));
       } catch {}
     }
 
     function adminLocalCacheAge(filter) {
       try {
-        const raw = localStorage.getItem('choco_list_' + filter);
+        const raw = localStorage.getItem(adminListStorageKey(filter));
         if (!raw) return Infinity;
         const obj = JSON.parse(raw);
         return Date.now() - Number(obj.ts || 0);
@@ -480,7 +485,7 @@
 
       try {
         const r = await jsonp(
-          { action: 'admin_list', adminKey: adminKey, filter: f, ts: Date.now() },
+          { action: 'admin_list', adminKey: adminKey, filter: f, fresh: '1', ts: Date.now() },
           1,
           12000
         );
@@ -510,7 +515,7 @@
 
       try {
         const r = await jsonp(
-          { action: 'admin_dashboard', adminKey: adminKey, ts: Date.now() },
+          { action: 'admin_dashboard', adminKey: adminKey, fresh: '1', ts: Date.now() },
           1,
           12000
         );
@@ -625,17 +630,35 @@
       } catch (_) {}
     }
 
+    let adminActionBusy = false;
     async function runAction(id, action) {
+      if (adminActionBusy) return;
+      adminActionBusy = true;
+      ++adminLoadSeq;
       toast('處理中…');
       try {
-        const r = await jsonp({ action: 'admin_action', adminKey: adminKey, bookingId: id, adminAction: action, ts: Date.now() });
-        if (!r.ok) throw new Error(apiErrorMessage(r));
+        const r = await jsonp({ action: 'admin_action', adminKey: adminKey, bookingId: id, adminAction: action, ts: Date.now() }, 1, 20000);
+        if (!r.ok) {
+          if (r.error && r.error.code === 'NOT_FOUND') {
+            invalidatePublicBookingCaches();
+            await loadFilterFast(filter, true);
+          }
+          throw new Error(apiErrorMessage(r));
+        }
         invalidatePublicBookingCaches();
         const msg = [r.data && r.data.message, r.data && r.data.lineNotice].filter(Boolean).join('\n');
         toast(msg || '操作成功');
         await loadFilterFast(filter, true);
       } catch (e) {
-        toast(e.message);
+        if (/timeout|API error/i.test(e.message)) {
+          invalidatePublicBookingCaches();
+          await loadFilterFast(filter, true);
+          toast('操作結果尚未確認，已重新同步清單；請先查看最新狀態。');
+        } else {
+          toast(e.message);
+        }
+      } finally {
+        adminActionBusy = false;
       }
     }
 
@@ -964,6 +987,13 @@
       return String(s ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
     }
 
+    function refreshAdminOnReturn() {
+      if (!adminKey || document.hidden || managerPage !== 'bookings' || adminActionBusy) return;
+      loadFilterFast(filter, true);
+    }
+    window.addEventListener('focus', refreshAdminOnReturn);
+    document.addEventListener('visibilitychange', refreshAdminOnReturn);
+
     if (adminKey) {
       $('login').style.display = 'none';
       $('dashboard').style.display = 'block';
@@ -972,7 +1002,7 @@
       if (!hasCache) $('list').innerHTML = '<div class="loading">正在同步最新預約…</div>';
 
       // 只同步目前畫面，不預載休假與服務設定。
-      loadFilterFast(filter, false);
+      loadFilterFast(filter, true);
     }
   </script>
 </body>
