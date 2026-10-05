@@ -548,6 +548,18 @@
       list.innerHTML = items.map(card).join('');
     }
 
+    function bufferEndTime(x) {
+      const parseTime = value => {
+        const match = String(value || '').match(/^(\d{1,2}):(\d{2})$/);
+        return match ? Number(match[1]) * 60 + Number(match[2]) : NaN;
+      };
+      const serviceEnd = parseTime(x.serviceEnd);
+      if (!Number.isFinite(serviceEnd)) return '—';
+      const storedLockEnd = parseTime(x.lockEnd);
+      const end = Math.max(serviceEnd + 30, Number.isFinite(storedLockEnd) ? storedLockEnd : 0);
+      return (end >= 1440 ? '翌日 ' : '') + String(Math.floor((end % 1440) / 60)).padStart(2, '0') + ':' + String(end % 60).padStart(2, '0');
+    }
+
     function card(x) {
       const cls = x.status ? (['已確認', '待確認'].includes(x.status) ? 'confirmed' : '') : '';
       let actionHtml = '';
@@ -577,6 +589,7 @@
         </div>
         <div class="details">
           <b>預計結束：</b>${escapeHtml(x.serviceEnd)}<br>
+          <b>緩衝至：</b>${escapeHtml(bufferEndTime(x))}（下一筆最早開始時間）<br>
           <b>地點：</b>${escapeHtml(place)}<br>
           ${x.note ? ('<b>細項：</b>' + escapeHtml(x.note)) : ''}
         </div>

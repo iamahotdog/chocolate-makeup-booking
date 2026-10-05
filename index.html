@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Chocolate booking release: 20261001-v5-blocked-times -->
+<!-- Chocolate booking release: 20261005-v6-buffer30 -->
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
@@ -382,6 +382,7 @@
               <div id="timeUnavailableState" class="timeState bad hidden"></div>
             </div>
 
+            <div class="fieldHint">每筆預約之間保留 30 分鐘緩衝，僅顯示符合間隔的可預約時間 ♡</div>
             <input id="selectedStartTime" type="hidden">
             <div class="fieldHint">灰色時段目前不可預約，請選擇其他時間。<span id="makeoverWeekdayHint" class="hidden">平日 10:00 後至 14:00 前暫不開放預約。</span></div>
           </div>
@@ -742,6 +743,7 @@
     let bookingCalendarRenderSeq = 0;
     let monthOccupancySeq = {};
     const monthOccupancyInFlight = {};
+    const BOOKING_BUFFER_MINUTES = 30;
     const MONTH_OCCUPANCY_TTL = 60000;
     const MONTH_LOCAL_CACHE_TTL = 5 * 60 * 1000;
 
@@ -750,7 +752,7 @@
     }
 
     function monthCacheStorageKey(month) {
-      return 'choco_month_occ_v3_' + month;
+      return 'choco_month_occ_v4_buffer30_' + month;
     }
 
     function invalidateBookingCache(dateKey = '') {
@@ -899,12 +901,12 @@
 
       if (serviceId === 'lesson') {
         if (weekday !== 0 && weekday !== 6) return false;
-        return !intervalsOverlap(660, 930, intervals);
+        return !intervalsOverlap(660, 900 + BOOKING_BUFFER_MINUTES, intervals);
       }
 
       const duration = estimateServiceMinutesLocal();
       if (!duration) return false;
-      const lockDuration = duration + 30;
+      const lockDuration = duration + BOOKING_BUFFER_MINUTES;
 
       for (let mins = 0; mins < 1440; mins += 5) {
         const h = String(Math.floor(mins / 60)).padStart(2, '0');
@@ -1496,9 +1498,9 @@
       const [h, m] = startTime.split(':').map(Number);
       const start = h * 60 + m;
       const duration = estimateServiceMinutesLocal();
-      const end = start + duration + 30;
+      const end = start + duration + BOOKING_BUFFER_MINUTES;
       if (!duration || end > 1440) return true;
-      return (currentDayOccupancy.intervals || []).some(x => start < x.end && end > x.start);
+      return intervalsOverlap(start, end, currentDayOccupancy.intervals);
     }
 
     function isSelectableStartTime(time, dateValue) {
@@ -1571,7 +1573,7 @@
       const duration = estimateServiceMinutesLocal();
       if (!date || !duration) return [];
       const slots = [];
-      for (let mins = 0; mins + duration + 30 <= 1440; mins += 30) {
+      for (let mins = 0; mins + duration + BOOKING_BUFFER_MINUTES <= 1440; mins += 30) {
         const time = String(Math.floor(mins / 60)).padStart(2, '0') + ':' + String(mins % 60).padStart(2, '0');
         if (isAllowedStartTime(time, date)) slots.push(time);
       }
