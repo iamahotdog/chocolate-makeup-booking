@@ -583,12 +583,6 @@
     </div>
   </div>
 
-  <details style="margin:24px 16px;color:#755347;font-size:12px">
-    <summary>使用遇到卡頓？匯出診斷紀錄</summary>
-    <p>紀錄僅保留在此裝置，包含操作、連線耗時與錯誤類型，不包含預約內容。遇到問題後請匯出檔案提供給巧克力。</p>
-    <button type="button" onclick="bookingDiagnostics.download()">匯出診斷紀錄</button>
-    <button type="button" onclick="bookingDiagnostics.clear()">清除紀錄</button>
-  </details>
   <script>
     // 固定欄位白名單：不收集 URL、API 參數、Token 或預約資料。
     const bookingDiagnostics = (() => {
@@ -605,7 +599,7 @@
       }
       function log(event, fields = {}) {
         const item = { at: new Date().toISOString(), session, event };
-        ['action', 'durationMs', 'outcome', 'attempt', 'errorType', 'line', 'online', 'service'].forEach(k => {
+        ['action', 'durationMs', 'outcome', 'attempt', 'errorType', 'line', 'online', 'service', 'requestId'].forEach(k => {
           if (['string', 'number', 'boolean'].includes(typeof fields[k])) item[k] = fields[k];
         });
         entries.push(item);
@@ -628,13 +622,17 @@
       return {
         log,
         clear() { entries = []; if (pending) clearTimeout(pending); pending = null; try {localStorage.removeItem(key);} catch (_) {} },
-        download() {
-          persist();
-          const blob = new Blob([JSON.stringify({version: 1, exportedAt: new Date().toISOString(), entries}, null, 2)], {type: 'application/json'});
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a'); a.href = url; a.download = 'chocolate-diagnostics-' + Date.now() + '.json';
-          document.body.appendChild(a); a.click(); a.remove();
-          setTimeout(() => URL.revokeObjectURL(url), 10000);
+        flush() {
+          const abnormal = entries.filter(x => ['javascript_error', 'unhandled_rejection', 'long_task', 'booking_pending'].includes(x.event) || (x.event === 'api_end' && (x.outcome !== 'ok' || x.durationMs >= 4000)));
+          if (!abnormal.length || !navigator.onLine) return;
+          const batch = abnormal.slice(-20);
+          const body = new URLSearchParams({action: 'client_log', session, records: JSON.stringify(batch)});
+          try {
+            if (navigator.sendBeacon(API_URL, body)) {
+              entries = entries.filter(x => !batch.includes(x));
+              persist();
+            }
+          } catch (_) {}
         }
       };
     })();
@@ -1997,17 +1995,63 @@
     }
 
     async function pollStatus(requestId) {
-      const waits = [350, 700, 1200, 1800, 2600, 3800];
-      for (const wait of waits) {
-        await new Promise(r => setTimeout(r, wait));
-        const s = await jsonp({ action: 'status', requestId: requestId }, 9000, 2);
-        if (s.status === 'success') {
-          if (s.perf) console.log('booking performance', s.perf);
-          return s;
+      const deadline = Date.now() + 90000;
+      while (Date.now() < deadline) {
+        await new Promise(r => setTimeout(r, 1500));
+        let response;
+        try {
+          response = await jsonp({ action: 'status', requestId }, 7000, 1);
+        } catch (_) {
+          continue; // 單次網路逾時不等於預約失敗。
         }
-        if (s.status === 'error') throw new Error(s.message || '預約失敗');
+        const status = response && (response.data || response);
+        if (status.status === 'success') return status;
+        if (status.status === 'error') {
+          const error = new Error(status.message || '預約未完成，請重新確認資料。');
+          error.bookingRejected = true;
+          throw error;
+        }
       }
-      throw new Error('預約處理較久，請先不要重複送出；稍後重新開啟頁面即可確認。');
+      const error = new Error('正在確認預約結果');
+      error.bookingPending = true;
+      throw error;
+    }
+
+    let pendingBooking = null;
+    try { pendingBooking = JSON.parse(sessionStorage.getItem('choco_pending_booking') || 'null'); } catch (_) {}
+
+    function showPendingBooking() {
+      $('formPage').style.display = 'none';
+      $('result').innerHTML = `<section class="successCard"><div class="successCardBody">
+        <h2>正在確認預約結果 ♡</h2>
+        <p>目前連線較慢，預約可能已完成。請先不要重複預約；若已收到 LINE 預約摘要，可以直接傳訊息給巧克力確認。</p>
+        <button type="button" id="retryBookingStatus" onclick="recoverPendingBooking()">重新確認預約結果</button>
+        ${bookingContactReminderHtml()}
+      </div></section>`;
+    }
+
+    function clearPendingBooking() {
+      pendingBooking = null;
+      try { sessionStorage.removeItem('choco_pending_booking'); } catch (_) {}
+    }
+
+    async function recoverPendingBooking() {
+      if (!pendingBooking) return;
+      const button = $('retryBookingStatus');
+      if (button) { button.disabled = true; button.textContent = '確認中…'; }
+      try {
+        const result = await pollStatus(pendingBooking.requestId);
+        const data = pendingBooking;
+        clearPendingBooking();
+        try { finalizeBookingSuccess(result, data); } catch (_) { fallbackBookingSuccess(result, data); }
+      } catch (error) {
+        if (error.bookingRejected) {
+          clearPendingBooking();
+          $('result').textContent = '';
+          $('formPage').style.display = '';
+          notice('bad', error.message);
+        } else showPendingBooking();
+      }
     }
 
     function validateRequiredFields() {
@@ -2199,6 +2243,7 @@
     }
 
     async function submitBooking() {
+      if (pendingBooking) { showPendingBooking(); return; }
       if (!validateRequiredFields()) return;
 
       const hasLineSession = await ensureLineReadyForSubmit();
@@ -2275,6 +2320,8 @@
 
       try {
         console.log('BOOKING POST START', p.requestId);
+        pendingBooking = { requestId: p.requestId, serviceId: p.serviceId, date: p.date, time: p.time };
+        try { sessionStorage.setItem('choco_pending_booking', JSON.stringify(pendingBooking)); } catch (_) {}
         const postPromise = postForm(p).catch(err => {
           console.warn('BOOKING POST NETWORK WARNING', err);
           return null;
@@ -2286,6 +2333,7 @@
         const r = await pollStatus(p.requestId);
         await Promise.race([postPromise, new Promise(resolve => setTimeout(resolve, 500))]);
 
+        clearPendingBooking();
         console.log('BOOKING STATUS SUCCESS', { requestId: p.requestId, bookingId: r.id });
 
         // 到這裡後端已經成功；先清掉舊快取。
@@ -2303,7 +2351,13 @@
       } catch (e) {
         console.error('BOOKING SUBMIT ERROR', e);
 
-        const msg = e && e.message ? e.message : '預約失敗，請稍後再試。';
+        if (!e.bookingRejected && pendingBooking) {
+          bookingDiagnostics.log('booking_pending', {requestId: pendingBooking.requestId});
+          showPendingBooking();
+          return;
+        }
+        clearPendingBooking();
+        const msg = e && e.message ? e.message : '暫時無法確認預約，請透過 LINE 聯繫巧克力。';
 
         // 若是時段衝突，清掉所有舊快取並立即刷新該日可選時段。
         if (/時段|衝突|額滿|已被|無法預約/.test(msg)) {
@@ -2363,6 +2417,9 @@
 
     // ===== 初始化 =====
     initForm();
+    if (pendingBooking && pendingBooking.requestId) { showPendingBooking(); void recoverPendingBooking(); }
+    setInterval(() => { if (document.visibilityState === 'visible') bookingDiagnostics.flush(); }, 60000);
+    window.addEventListener('pagehide', () => bookingDiagnostics.flush());
 
     // 先用本機最後一次服務設定立即畫出首頁，再背景同步最新狀態。
     if (!restoreServiceSettingsCache()) {
