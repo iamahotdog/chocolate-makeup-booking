@@ -785,14 +785,14 @@
 
         if (serviceId === 'lesson') {
           $('selectedStartTime').value = '11:00';
-          await loadDayOccupancy(true);
+          await loadDayOccupancy(false);
           scheduleCheck();
           return;
         }
 
         if (hydrated) renderAvailableTimeButtons();
         else renderTimePickerLoading();
-        await loadDayOccupancy(true);
+        await loadDayOccupancy(false);
       });
     }
 
@@ -1064,15 +1064,9 @@
     }
 
     function preloadBookingCalendarData(force = false) {
-      const base = bookingCalendarBaseDate();
-      const month = monthKeyFromDate(base);
-      const nextMonth = monthKeyFromDate(new Date(base.getFullYear(), base.getMonth() + 1, 1));
-      // 先準備本月，再準備下月；不一次送出兩筆額外請求。
-      const preloadNext = serviceId !== 'lesson';
-      return getPublicMonthOccupancy(month, force).then(data => {
-        if (preloadNext && !data.partial) getPublicMonthOccupancy(nextMonth, false).catch(() => {});
-        return data;
-      }).catch(() => null);
+      const month = monthKeyFromDate(bookingCalendarBaseDate());
+      // 優先服務目前月份，避免下月預載和正在選擇的日期搶請求。
+      return getPublicMonthOccupancy(month, force).catch(() => null);
     }
 
     async function openBookingCalendar(requestedService) {
@@ -1559,7 +1553,19 @@
 
       const requestedService = serviceId;
       const key = dayOccupancyKey();
-      const cached = dayOccupancyCache[key];
+      let cached = dayOccupancyCache[key];
+      if (!force && (!cached || Date.now() - cached.ts >= 60000)) {
+        const month = publicMonthOccupancyCache[date.slice(0, 7)];
+        if (month && !month.data.partial && Date.now() - month.ts < MONTH_OCCUPANCY_TTL) {
+          hydrateDayOccupancyFromMonthCache(date);
+          cached = dayOccupancyCache[key];
+          if (cached && cached.ts >= month.ts) {
+            currentDayOccupancy = cached.data;
+            if (serviceId !== 'lesson') renderAvailableTimeButtons();
+            return currentDayOccupancy;
+          }
+        }
+      }
       if (cached && !force && Date.now() - cached.ts < 60000) {
         currentDayOccupancy = cached.data;
         if (serviceId !== 'lesson') renderAvailableTimeButtons();
@@ -1567,7 +1573,7 @@
       }
 
       const pending = dayOccupancyInFlight[key];
-      if (pending && pending.force === !!force) return pending.promise;
+      if (pending && (pending.force || !force)) return pending.promise;
 
       const seq = ++occupancySeq;
       const promise = (async () => {
@@ -1800,7 +1806,7 @@
         // 先顯示選取結果。共用日期選擇已發出的請求，在背景更新，
         // renderAvailableTimeButtons 會清除已衝突的選取；送出前仍強制檢查。
         if (Date.now() - lastFreshOccupancyAt > 15000) {
-          void loadDayOccupancy(true);
+          void loadDayOccupancy(false);
         }
       }
     }
@@ -2432,7 +2438,7 @@
             if (seq === bookingCalendarRenderSeq && month === monthKeyFromDate(bookingCalendarCursor)) renderCalendarShell(fresh);
           }
           if (formOpen && $('date').value) {
-            await loadDayOccupancy(true);
+            await loadDayOccupancy(manual);
           }
         }
       })().finally(() => { availabilityRefreshTask = null; });
