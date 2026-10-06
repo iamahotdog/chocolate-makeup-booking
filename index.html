@@ -217,6 +217,11 @@
     .successMeta { margin: 18px 0 0; padding: 14px 16px; border-radius: 18px; background: #fffdfb; border: 1px solid #ead7cc; }
     .successMetaLine { margin: 0; color: var(--brown); font-size: 13.5px; line-height: 1.85; }
     .successMetaLine strong { color: var(--ink); }
+    .bookingContactReminder { margin: 14px 0; padding: 16px; border: 1px solid #e3c9ba; border-radius: 16px; background: #fff0e7; color: var(--brown); line-height: 1.75; font-size: 13px; overflow-wrap: anywhere; }
+    .bookingContactReminder strong { display: block; }
+    .bookingContactReminder p { margin: 8px 0 12px; }
+    .bookingContactReminder a { display: block; padding: 12px; border-radius: 12px; background: var(--brown); color: #fff; text-align: center; font-weight: 800; text-decoration: none; }
+    .bookingContactReminder small { display: block; margin-top: 10px; }
     .successBlockCard { margin-top: 14px; border: 1px solid #e3c9ba; border-radius: 20px; overflow: hidden; background: #fff; }
     .successBlockHead { padding: 14px 16px; background: linear-gradient(#986041, #875237); color: #fffaf6; font-size: 16px; font-weight: 800; }
     .successBlockBody { padding: 15px 16px; color: #6d4a3e; font-size: 13px; line-height: 1.68; background: #fffdfb; }
@@ -578,6 +583,62 @@
     </div>
   </div>
 
+  <details style="margin:24px 16px;color:#755347;font-size:12px">
+    <summary>使用遇到卡頓？匯出診斷紀錄</summary>
+    <p>紀錄僅保留在此裝置，包含操作、連線耗時與錯誤類型，不包含預約內容。遇到問題後請匯出檔案提供給巧克力。</p>
+    <button type="button" onclick="bookingDiagnostics.download()">匯出診斷紀錄</button>
+    <button type="button" onclick="bookingDiagnostics.clear()">清除紀錄</button>
+  </details>
+  <script>
+    // 固定欄位白名單：不收集 URL、API 參數、Token 或預約資料。
+    const bookingDiagnostics = (() => {
+      const key = 'choco_diagnostics_v1';
+      let entries = [];
+      try { entries = JSON.parse(localStorage.getItem(key) || '[]'); } catch (_) {}
+      if (!Array.isArray(entries)) entries = [];
+      entries = entries.filter(x => x && Date.now() - Date.parse(x.at) < 86400000).slice(-150);
+      const session = Date.now().toString(36);
+      let pending = null;
+      function persist() {
+        pending = null;
+        try { localStorage.setItem(key, JSON.stringify(entries)); } catch (_) {}
+      }
+      function log(event, fields = {}) {
+        const item = { at: new Date().toISOString(), session, event };
+        ['action', 'durationMs', 'outcome', 'attempt', 'errorType', 'line', 'online', 'service'].forEach(k => {
+          if (['string', 'number', 'boolean'].includes(typeof fields[k])) item[k] = fields[k];
+        });
+        entries.push(item);
+        entries = entries.filter(x => Date.now() - Date.parse(x.at) < 86400000).slice(-150);
+        if (!pending) pending = setTimeout(persist, 1000);
+      }
+      window.addEventListener('error', e => log('javascript_error', {errorType: e.error?.name || 'ResourceError', line: e.lineno || 0}));
+      window.addEventListener('unhandledrejection', e => log('unhandled_rejection', {errorType: e.reason?.name || 'UnknownError'}));
+      window.addEventListener('online', () => log('network', {online: true}));
+      window.addEventListener('offline', () => log('network', {online: false}));
+      window.addEventListener('pagehide', persist);
+      try {
+        if (typeof PerformanceObserver !== 'undefined' && PerformanceObserver.supportedEntryTypes.includes('longtask')) {
+          new PerformanceObserver(list => list.getEntries().forEach(e => {
+            if (document.visibilityState === 'visible' && e.duration >= 100) log('long_task', {durationMs: Math.round(e.duration)});
+          })).observe({type: 'longtask', buffered: true});
+        }
+      } catch (_) {}
+      log('page_open', {online: navigator.onLine});
+      return {
+        log,
+        clear() { entries = []; if (pending) clearTimeout(pending); pending = null; try {localStorage.removeItem(key);} catch (_) {} },
+        download() {
+          persist();
+          const blob = new Blob([JSON.stringify({version: 1, exportedAt: new Date().toISOString(), entries}, null, 2)], {type: 'application/json'});
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a'); a.href = url; a.download = 'chocolate-diagnostics-' + Date.now() + '.json';
+          document.body.appendChild(a); a.click(); a.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 10000);
+        }
+      };
+    })();
+  </script>
   <script>
     const LIFF_ID = '2011209138-92DnVffL';
     const API_URL = 'https://script.google.com/macros/s/AKfycbxEph50mLaejdFporC7_XOpShtk2ibvO758lA8_-TWGY8Jv9sJilfRTdXCmJ0ZLRK-4jg/exec';
@@ -1121,6 +1182,7 @@
     }
 
     function selectBookingDate(dateKey) {
+      bookingDiagnostics.log('select_date', {service: serviceId});
       if (dateKey < minimumBookingDateKey()) return;
       $('date').value = dateKey;
       $('dateDisplay').textContent = dateKey.replace(/-/g, '/');
@@ -1709,6 +1771,7 @@
     }
 
     function selectStartTime(time, button, runCheck = true) {
+      if (runCheck) bookingDiagnostics.log('select_time', {service: serviceId});
       const date = $('date').value;
       if (!date) return;
       if (!isSelectableStartTime(time, date)) {
@@ -1842,9 +1905,14 @@
     async function jsonp(params, timeoutMs = 8500, retries = 2) {
       let lastErr = null;
       for (let i = 0; i < retries; i++) {
+        const started = performance.now();
+        bookingDiagnostics.log('api_start', {action: params.action, attempt: i + 1});
         try {
-          return await jsonpOnce(params, i === 0 ? timeoutMs : Math.max(timeoutMs, 10000));
+          const result = await jsonpOnce(params, i === 0 ? timeoutMs : Math.max(timeoutMs, 10000));
+          bookingDiagnostics.log('api_end', {action: params.action, attempt: i + 1, durationMs: Math.round(performance.now() - started), outcome: result && result.ok === false ? 'api_error' : 'ok'});
+          return result;
         } catch (e) {
+          bookingDiagnostics.log('api_end', {action: params.action, attempt: i + 1, durationMs: Math.round(performance.now() - started), outcome: e.message === 'timeout' ? 'timeout' : 'network_error'});
           lastErr = e;
           if (i < retries - 1) await new Promise(r => setTimeout(r, 350 + 250 * i));
         }
@@ -1982,6 +2050,15 @@
       return true;
     }
 
+    function bookingContactReminderHtml() {
+      return `<div class="bookingContactReminder">
+        <strong>📣預約完成後一定要再次傳訊息提醒我📣</strong>
+        <p>否則容易漏看訊息而導致沒有預約成功喔😖🥺🙏🏻</p>
+        <a href="https://lin.ee/nn5Himu" target="_blank" rel="noopener noreferrer">傳訊息給巧克力 ♡</a>
+        <small>請傳送您的姓名、預約日期與時間，方便巧克力找到您的預約 ♡</small>
+      </div>`;
+    }
+
     function finalizeBookingSuccess(r, p) {
       const successToast = $('bookingSuccessToast');
       if (successToast) {
@@ -2007,6 +2084,7 @@
                 <h2 class="successTimeTitle">時間幫您登記好囉 ♡</h2>
                 <p class="successTimeValue">${names[p.serviceId]}　${bookingTime}</p>
               </div>
+              ${bookingContactReminderHtml()}
 
               <div class="successBlockCard">
                 <div class="successBlockHead">接下來的流程 ♡</div>
@@ -2036,6 +2114,7 @@
                 <h2 class="successTimeTitle">時間幫您登記好囉 ♡</h2>
                 <p class="successTimeValue">${names[p.serviceId]}　${bookingTime}</p>
               </div>
+              ${bookingContactReminderHtml()}
 
               <div class="successBlockCard">
                 <div class="successBlockHead">接下來的流程 ♡</div>
@@ -2079,6 +2158,7 @@
                 <h2 class="successTimeTitle">時間幫您登記好囉 ♡</h2>
                 <p class="successTimeValue">${serviceName}　${bookingTime}</p>
               </div>
+              ${bookingContactReminderHtml()}
               <div class="successBlockCard">
                 <div class="successBlockHead">接下來的流程 ♡</div>
                 <div class="successBlockBody">
