@@ -2247,9 +2247,35 @@
       }
     }
 
+    let bookingSubmitInProgress = false;
+
     async function submitBooking() {
+      if (bookingSubmitInProgress) return;
       if (pendingBooking) { showPendingBooking(); return; }
       if (!validateRequiredFields()) return;
+      const button = $('submit');
+      bookingSubmitInProgress = true;
+      button.disabled = true;
+      button.setAttribute('aria-busy', 'true');
+      button.textContent = '正在確認 LINE 連線…';
+      notice('', '正在確認 LINE 連線與預約資料，請稍候 ♡');
+      try {
+        // 先讓按鈕更新顯示，再開始身分確認及網路請求。
+        await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
+        await performSubmitBooking();
+      } catch (error) {
+        bookingDiagnostics.log('unhandled_rejection', {errorType: error.name || 'Error'});
+        if (pendingBooking) showPendingBooking();
+        else notice('bad', '目前連線較慢，請稍後再試或透過 LINE 聯繫巧克力。');
+      } finally {
+        bookingSubmitInProgress = false;
+        button.disabled = false;
+        button.removeAttribute('aria-busy');
+        button.textContent = '先預定這個時間 ✦';
+      }
+    }
+
+    async function performSubmitBooking() {
 
       const hasLineSession = await ensureLineReadyForSubmit();
       if (!hasLineSession) {
