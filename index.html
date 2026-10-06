@@ -217,22 +217,23 @@
     .successMeta { margin: 18px 0 0; padding: 14px 16px; border-radius: 18px; background: #fffdfb; border: 1px solid #ead7cc; }
     .successMetaLine { margin: 0; color: var(--brown); font-size: 13.5px; line-height: 1.85; }
     .successMetaLine strong { color: var(--ink); }
-    .bookingContactReminder { margin: 14px 0; padding: 16px; border: 1px solid #e3c9ba; border-radius: 16px; background: #fff0e7; color: var(--brown); line-height: 1.75; font-size: 13px; overflow-wrap: anywhere; }
-    .bookingContactReminder strong { display: block; }
-    .bookingContactReminder p { margin: 8px 0 12px; }
-    .bookingContactReminder a { display: block; padding: 12px; border-radius: 12px; background: var(--brown); color: #fff; text-align: center; font-weight: 800; text-decoration: none; }
-    .bookingContactReminder small { display: block; margin-top: 10px; }
-    .successBlockCard { margin-top: 14px; border: 1px solid #e3c9ba; border-radius: 20px; overflow: hidden; background: #fff; }
-    .successBlockHead { padding: 14px 16px; background: linear-gradient(#986041, #875237); color: #fffaf6; font-size: 16px; font-weight: 800; }
-    .successBlockBody { padding: 15px 16px; color: #6d4a3e; font-size: 13px; line-height: 1.68; background: #fffdfb; }
+    .bookingContactReminder { margin-top: 16px; border: 1px solid #e3c9ba; border-radius: 16px; overflow: hidden; background: #fffdfb; color: var(--brown); line-height: 1.75; font-size: 13px; overflow-wrap: anywhere; }
+    .bookingContactReminder p { margin: 0 0 12px; }
+    .bookingContactReminder a { display: block; padding: 12px; border-radius: 10px; background: var(--brown); color: #fff; text-align: center; font-weight: 800; text-decoration: none; }
+    .bookingContactReminder small { display: block; margin-top: 10px; font-size: 12px; line-height: 1.7; }
+    .successBlockCard { margin-top: 16px; border: 1px solid #e3c9ba; border-radius: 16px; overflow: hidden; background: #fffdfb; }
+    .successBlockHead { padding: 12px 16px; border-bottom: 1px solid #ead7cc; background: #f7ece4; color: var(--brown); font-size: 14px; line-height: 1.65; font-weight: 800; }
+    .successBlockBody { padding: 16px; color: #6d4a3e; font-size: 13px; line-height: 1.8; background: #fffdfb; }
     .successBlockBody ol { margin: 0; padding-left: 22px; }
     .successBlockBody li { margin: 0 0 5px; }
     .successBlockBody li:last-child { margin-bottom: 0; }
     .successDivider { margin: 11px 0; border: 0; border-top: 1px dashed #e0cbbb; }
     .successStrong { color: var(--ink); font-weight: 800; }
-    .successTimeHero { padding: 2px 0 2px; }
-    .successTimeTitle { margin: 0 0 7px; font-size: 22px; line-height: 1.35; }
+    .successTimeHero { padding: 2px 0 8px; }
+    .successTimeTitle { margin: 0 0 12px; font-size: 22px; line-height: 1.35; }
     .successTimeValue { margin: 0; color: var(--brown); font-size: 15px; font-weight: 500; line-height: 1.6; }
+    .successTimeValue span { display: block; }
+    .successTimeValue span + span { margin-top: 4px; font-size: 14px; font-variant-numeric: tabular-nums; }
     .successPhotoList { margin: 8px 0 0; padding: 0; list-style: none; }
     .successPhotoList li { margin: 4px 0; }
     .quickTipBtn { display: inline-flex; align-items: center; gap: 6px; margin: 0; padding: 0; border: 0; background: none; color: var(--brown); font-size: 13px; font-weight: 800; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; white-space: nowrap; }
@@ -1997,11 +1998,12 @@
     async function pollStatus(requestId) {
       const deadline = Date.now() + 90000;
       while (Date.now() < deadline) {
-        await new Promise(r => setTimeout(r, 1500));
         let response;
         try {
-          response = await jsonp({ action: 'status', requestId }, 7000, 1);
+          // GAS 冷啟動可能超過 7 秒；太早放棄會丟掉已回傳的成功結果。
+          response = await jsonp({ action: 'status', requestId }, 20000, 1);
         } catch (_) {
+          await new Promise(r => setTimeout(r, 1500));
           continue; // 單次網路逾時不等於預約失敗。
         }
         const status = response && (response.data || response);
@@ -2011,6 +2013,7 @@
           error.bookingRejected = true;
           throw error;
         }
+        await new Promise(r => setTimeout(r, 1500));
       }
       const error = new Error('正在確認預約結果');
       error.bookingPending = true;
@@ -2096,10 +2099,12 @@
 
     function bookingContactReminderHtml() {
       return `<div class="bookingContactReminder">
-        <strong>📣預約完成後一定要再次傳訊息提醒我📣</strong>
+        <div class="successBlockHead">📣預約完成後一定要再次傳訊息提醒我📣</div>
+        <div class="successBlockBody">
         <p>否則容易漏看訊息而導致沒有預約成功喔😖🥺🙏🏻</p>
         <a href="https://lin.ee/nn5Himu" target="_blank" rel="noopener noreferrer">傳訊息給巧克力 ♡</a>
         <small>請傳送您的姓名、預約日期與時間，方便巧克力找到您的預約 ♡</small>
+        </div>
       </div>`;
     }
 
@@ -2126,7 +2131,7 @@
 
               <div class="successTimeHero">
                 <h2 class="successTimeTitle">時間幫您登記好囉 ♡</h2>
-                <p class="successTimeValue">${names[p.serviceId]}　${bookingTime}</p>
+                <p class="successTimeValue"><span>${names[p.serviceId]}</span><span>${bookingTime}</span></p>
               </div>
               ${bookingContactReminderHtml()}
 
@@ -2156,7 +2161,7 @@
 
               <div class="successTimeHero">
                 <h2 class="successTimeTitle">時間幫您登記好囉 ♡</h2>
-                <p class="successTimeValue">${names[p.serviceId]}　${bookingTime}</p>
+                <p class="successTimeValue"><span>${names[p.serviceId]}</span><span>${bookingTime}</span></p>
               </div>
               ${bookingContactReminderHtml()}
 
@@ -2200,7 +2205,7 @@
             <div class="successCardBody">
               <div class="successTimeHero">
                 <h2 class="successTimeTitle">時間幫您登記好囉 ♡</h2>
-                <p class="successTimeValue">${serviceName}　${bookingTime}</p>
+                <p class="successTimeValue"><span>${serviceName}</span><span>${bookingTime}</span></p>
               </div>
               ${bookingContactReminderHtml()}
               <div class="successBlockCard">
@@ -2290,7 +2295,6 @@
         return;
       }
 
-      if (availabilityRefreshTask) await availabilityRefreshTask;
       const b = $('submit');
       b.disabled = true;
       b.textContent = '確認時段中...';
@@ -2328,10 +2332,14 @@
         });
         console.log('BOOKING POST SENT', p.requestId);
         notice('', '');
+        // 送出後立即進入確認畫面，讓表單不再像卡住；成功內容仍等後端確認。
+        showPendingBooking();
+        const retryButton = $('retryBookingStatus');
+        if (retryButton) { retryButton.disabled = true; retryButton.textContent = '確認中…'; }
+        window.scrollTo({ top: 0, behavior: 'smooth' });
 
         // 先輪詢，不等 doPost 整支跑完（LINE push 可能較慢）。
         const r = await pollStatus(p.requestId);
-        await Promise.race([postPromise, new Promise(resolve => setTimeout(resolve, 500))]);
 
         clearPendingBooking();
         console.log('BOOKING STATUS SUCCESS', { requestId: p.requestId, bookingId: r.id });
