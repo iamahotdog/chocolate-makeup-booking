@@ -600,7 +600,7 @@
       }
       function log(event, fields = {}) {
         const item = { at: new Date().toISOString(), session, event };
-        ['action', 'durationMs', 'outcome', 'attempt', 'errorType', 'line', 'online', 'service', 'requestId'].forEach(k => {
+        ['action', 'durationMs', 'outcome', 'attempt', 'errorType', 'line', 'online', 'service', 'requestId', 'cachePath', 'serverMs', 'rebuildWaitMs'].forEach(k => {
           if (['string', 'number', 'boolean'].includes(typeof fields[k])) item[k] = fields[k];
         });
         entries.push(item);
@@ -624,7 +624,7 @@
         log,
         clear() { entries = []; if (pending) clearTimeout(pending); pending = null; try {localStorage.removeItem(key);} catch (_) {} },
         flush() {
-          const abnormal = entries.filter(x => ['javascript_error', 'unhandled_rejection', 'long_task', 'booking_pending'].includes(x.event) || (x.event === 'api_end' && (x.outcome !== 'ok' || x.durationMs >= 4000)));
+          const abnormal = entries.filter(x => ['javascript_error', 'unhandled_rejection', 'long_task', 'booking_pending', 'server_query'].includes(x.event) || (x.event === 'api_end' && (x.outcome !== 'ok' || x.durationMs >= 4000)));
           if (!abnormal.length || !navigator.onLine) return;
           const batch = abnormal.slice(-20);
           const body = new URLSearchParams({action: 'client_log', session, records: JSON.stringify(batch)});
@@ -1915,6 +1915,9 @@
         try {
           const result = await jsonpOnce(params, i === 0 ? timeoutMs : Math.max(timeoutMs, 10000));
           bookingDiagnostics.log('api_end', {action: params.action, attempt: i + 1, durationMs: Math.round(performance.now() - started), outcome: result && result.ok === false ? 'api_error' : 'ok'});
+          if (result && result.queryPerf) {
+            bookingDiagnostics.log('server_query', {action: params.action, cachePath: result.queryPerf.path, serverMs: result.queryPerf.durationMs, rebuildWaitMs: result.queryPerf.rebuildWaitMs});
+          }
           return result;
         } catch (e) {
           bookingDiagnostics.log('api_end', {action: params.action, attempt: i + 1, durationMs: Math.round(performance.now() - started), outcome: e.message === 'timeout' ? 'timeout' : 'network_error'});
